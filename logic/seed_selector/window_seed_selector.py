@@ -37,7 +37,7 @@ class WindowSeedSelector(SeedSelector):
         for seed in seeds:
             cv2.circle(coloredImage,center=seed,radius=4,color=(255,0,0))
 
-
+        plt.figure()
         plt.title('seeds')
         plt.imshow(coloredImage)
         plt.show()

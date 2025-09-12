@@ -105,6 +105,6 @@ class SkullStripping:
         img[~bw.astype(bool)] = 0
         norm_img[~bw.astype(bool)] = 0
         if self.debug:
-            plt.show()
+            plt.show(block=True)
         ctx.set('roi',img)
         return ctx  # norm_img
