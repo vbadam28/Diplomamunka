@@ -1,34 +1,59 @@
-from PySide6.QtWidgets import QApplication
-
-from window import MainWindow
-
 import sys
 
-#import cv2
-#import h5py
-#import numpy as np
-#import nibabel as nib
-
-#from Logic import loadNifti, findSeedPoints , enhanceImage, QuadTree
-from DebugLogic import DebugLogic
+from PySide6.QtWidgets import QApplication
+from gui.window import MainWindow
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-
     wd = MainWindow()
-    #wd = MainWindow(Logic,DebugLogic)
     wd.show()
-
     app.exec()
-    #l= DebugLogic()
-    #path = '../content/data_ni/BraTS20_Training_355_flair.nii'
-    #nifti_img = l.loadNifti(path)
-    #seg_path = '../content/data_ni/W39_1998.09.19_Segm.nii'
-    #nifti_img_seg = l.loadNifti(seg_path)
 
-    #layer = 100
-    #l.executeCustomAlg1(nifti_img[:,:,layer])
-    #l.executeAlg2(nifti_img[:,:,layer])
+'''
+    l= DebugLogic()
+    path = '../content/data_ni/BraTS20_Training_355_flair.nii'
+    nifti_img = l.loadNifti(path)
+    seg_path = '../content/data_ni/W39_1998.09.19_Segm.nii'
+    nifti_img_seg = l.loadNifti(seg_path)
 
+    layer = 100
+    wds = l.getWindows(nifti_img[:,:,layer],(7,7),(2,2))
+
+    print(nifti_img[:,:,layer].shape)
+    print(wds.shape)
+
+    from matplotlib import pyplot as plt
+    import cv2
+    import numpy as np
+
+
+    test = cv2.imread("../content/data_ni/test2.png",cv2.IMREAD_GRAYSCALE).astype(np.uint8)
+    test = cv2.normalize(cv2.resize(test,(240,240)),None, 0, 1, cv2.NORM_MINMAX)
+    test = nifti_img[:,:,layer].copy()
+    b = []#l.executeCustomAlg1(test.copy())#.astype(np.uint8))
+    #pipeline = PipelineFactory.select5Seeds()
+    #pipeline.options.debug=True
+    from logic.pipeline.pipelineFactory import PipelineFactory
+    from logic.pipeline.pipelineContext import PipelineContext
+    from logic.preprocessing.sliding_window import SlidingWindow
+    from logic.preprocessing.preprocessing_step import enhanceImage,PreprocessingStep
+    from logic.seed_selector.window_seed_selector import WindowSeedSelector
+    from logic.region_growing.opencv_region_growing import OpenCVRegionGrowing
+    ctx = PipelineContext(test.copy(),False)
+    pl = PipelineFactory.slidingWindows()
+    a = pl.run(ctx)
+    #a = pl.run(ctx)
+    for m in a:
+        plt.imshow(m,cmap="gray")
+        plt.show()
+
+    plt.subplot(1,2,1)
+    plt.title('régi')
+    #plt.imshow(b,cmap='gray')
+    #a = pipeline.run(test)
+    plt.subplot(1,2,2)
+    plt.imshow(a[0], cmap="gray")
+    plt.show()
+'''
 if False:
     path = '../content/data_ni/BraTS20_Training_355_flair.nii'
     nifti_img = loadNifti(path)
