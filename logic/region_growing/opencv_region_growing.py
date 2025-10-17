@@ -16,6 +16,7 @@ class OpenCVRegionGrowing(RegionGrowingStrategy):
         self.debug = ctx.get('debug',False)
         img=ctx.get('image')
         seeds=ctx.get('seeds')
+        self.loadParams(ctx)
         width = 240
         height = 240
 
@@ -30,6 +31,7 @@ class OpenCVRegionGrowing(RegionGrowingStrategy):
             cv2.circle(seedImg, seed, 2, [0, 0, 255], 1)
             mask = np.zeros((seedImg.shape[0] + 2, seedImg.shape[1] + 2), dtype=np.uint8)
             floodFill = img.copy()
+            mask = np.zeros((floodFill.shape[0] + 2, floodFill.shape[1] + 2), dtype=np.uint8)
 
             retval, resImage, mask, rect = cv2.floodFill(
                 cv2.normalize(floodFill, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8), mask, seed, self.newVal, self.loDiff,
@@ -53,3 +55,8 @@ class OpenCVRegionGrowing(RegionGrowingStrategy):
             plt.show()
 
         return masks
+
+    def loadParams(self,ctx):
+        self.loDiff = ctx.params.get("cvrg:lo_diff", self.loDiff)
+        self.upDiff = ctx.params.get("cvrg:up_diff", self.upDiff)
+        return

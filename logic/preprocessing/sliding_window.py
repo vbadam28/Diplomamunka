@@ -118,7 +118,7 @@ class SlidingWindow:
 
         image = ctx.get('image')
         self.debug=ctx.get('debug')
-        self.mode = ctx.get('mode',self.mode)
+        self.loadParams(ctx)
 
         windows = []
         scoreMap=np.zeros((image.shape[0],image.shape[1]), dtype=float)
@@ -184,3 +184,14 @@ class SlidingWindow:
         plt.imshow(i2)
         plt.show()
         print(scoreMap.max(), scoreMap[scoreMap > 0].min(), scoreMap[scoreMap > 0].mean())
+
+    def loadParams(self,ctx):
+        h = ctx.params.get("sw:w_height",self.windowSize[0])
+        w = ctx.params.get("sw:w_width",self.windowSize[1])
+        self.windowSize = (h,w)
+
+        self.step = ctx.params.get("sw:step",self.step)
+        #self.overlapping = overlapping
+        #self.iouThres=iou
+        self.kTop=ctx.params.get("sw:top_k",self.kTop)
+        self.mode = ctx.params.get("sw:mode",self.mode)

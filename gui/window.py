@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import nibabel as nib
 
+from gui.control_window import ControlWindow
 from gui.image_display_widget import ImageDisplayWidget
 from logic.pipeline.pipelineContext import PipelineContext
 from logic.pipeline.pipelineFactory import PipelineFactory
@@ -20,6 +21,12 @@ class MainWindow(QMainWindow):
 
         self.debug = False
         self.pipeline = PipelineFactory.select5Seeds()
+        self.ctx = PipelineContext()
+        controls = getattr(self.pipeline, "controls", [])
+        self.controlWidget = ControlWindow(self.ctx, controls, parent=self)
+
+        self.controlAreaLayout = QVBoxLayout()
+        self.controlAreaLayout.addWidget(self.controlWidget)
 
         self.setWindowTitle("Image Viewer")
         #self.setGeometry(100, 100, 800, 600)
@@ -33,7 +40,7 @@ class MainWindow(QMainWindow):
         self.button.clicked.connect(self.openFileDialog)
 
         self.selectAlg = QtWidgets.QComboBox()
-        self.selectAlg.addItems(["select 5 seeds","divergence","divergence Blur", "Manual", "SplitMerge Gmm","Sliding Windows"])
+        self.selectAlg.addItems(["select 5 seeds","divergence","divergence Blur", "Manual", "SplitMerge Gmm","Sliding Windows","Enhanced Divergence"])
         self.selectAlg.currentIndexChanged.connect(self.onAlgChange)
 
         self.selectType = QtWidgets.QComboBox()
@@ -56,6 +63,7 @@ class MainWindow(QMainWindow):
         imageLayout = QtWidgets.QHBoxLayout()
         imageLayout.addWidget(self.origImagePlaceholder)
         imageLayout.addWidget(self.resultImagePlaceholder)
+        imageLayout.addLayout(self.controlAreaLayout)
 
         selectorLayout = QtWidgets.QHBoxLayout()
         selectorLayout.addWidget(self.selectAlg)
@@ -86,6 +94,7 @@ class MainWindow(QMainWindow):
     def onAlgChange(self,idx):
         value = self.selectAlg.currentIndex()
         print(f"Selected: {value},  {idx},   {self.selectAlg.currentData()}")
+        self.ctx = PipelineContext()#self.origImagePlaceholder.image, self.debug,self.origImagePlaceholder.seeds)
         if idx==0:
             self.pipeline = PipelineFactory.select5Seeds()
         elif idx==1:
@@ -98,9 +107,19 @@ class MainWindow(QMainWindow):
             self.pipeline = PipelineFactory.splitmergeGmm()
         elif idx == 5:
             self.pipeline = PipelineFactory.slidingWindows()
+        elif idx==6:
+            self.pipeline = PipelineFactory.enhancedDivergence()
         else:
             pass
 
+        if getattr(self, "controlWidget", None) is not None:
+            self.controlAreaLayout.removeWidget(self.controlWidget)
+            self.controlWidget.deleteLater()
+            self.controlWidget = None
+
+        controls = getattr(self.pipeline, "controls", [])
+        self.controlWidget = ControlWindow(self.ctx, controls, parent=self)
+        self.controlAreaLayout.addWidget(self.controlWidget)
 
     def onTypeChange(self,idx):
         if idx==0:
@@ -148,9 +167,16 @@ class MainWindow(QMainWindow):
 
         ctx = PipelineContext(self.origImagePlaceholder.image, self.debug,self.origImagePlaceholder.seeds)
 
+        self.ctx.data={'image':self.origImagePlaceholder.image, 'debug':self.debug, 'roi':self.origImagePlaceholder.image}
+
+        self.ctx.params = {key: value for ctrl in self.controlWidget.controls for key, value in ctrl.ctx.params.items() }
+
+        if self.origImagePlaceholder.seeds is not None:
+            self.ctx.set('seeds',self.origImagePlaceholder.seeds)
+
 
         #mask = self.logic.executeAlg2(self.image[:,:,self.slice]).astype(np.uint8)
-        masks = self.pipeline.run(ctx)
+        masks = self.pipeline.run(self.ctx)
         mask = masks[0]
         masks = np.moveaxis(np.array(masks), 0, -1)
 

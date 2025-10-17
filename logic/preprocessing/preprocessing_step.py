@@ -15,8 +15,10 @@ def enhanceImage(image, gamma=0.4, c=1):
     norm_img = cv2.normalize(image.astype(np.float32), None, 0, 1, cv2.NORM_MINMAX)
     return c * np.power(norm_img, gamma)
 
-def inverseEnhanceImage(image, gamma=0.4, c=1):
-    norm_img = cv2.normalize(image.astype(np.float32), None, 0, 1, cv2.NORM_MINMAX)
+def inverseEnhanceImage(image, gamma=0.4, c=1, isNorm = False):
+    norm_img = np.array(image).copy()
+    if isNorm:
+        norm_img = cv2.normalize(image.astype(np.float32), None, 0, 1, cv2.NORM_MINMAX)
     return c * np.power(norm_img, 1 / gamma)
 
 def normalize(image):

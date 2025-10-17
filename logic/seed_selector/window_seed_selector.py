@@ -10,6 +10,8 @@ class WindowSeedSelector(SeedSelector):
         self.debug = ctx.get('debug')
         image = ctx.get('image')
         windows = ctx.get('windows')
+        self.loadParams(ctx)
+
         seeds=[]
         if self.mode=="center":
             for w in windows:
@@ -41,3 +43,7 @@ class WindowSeedSelector(SeedSelector):
         plt.title('seeds')
         plt.imshow(coloredImage)
         plt.show()
+
+
+    def loadParams(self,ctx):
+        self.mode = ctx.params.get("wss:mode",self.mode)

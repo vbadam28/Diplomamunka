@@ -4,7 +4,7 @@ import numpy as np
 from logic.preprocessing.preprocessing_step import inverseEnhanceImage
 
 
-class QuadTree:
+class EnhancedQuadTree:
     hyperintenseRange = (0.8, 1.0)  # (0.47, 0.8)  # Egész datasetből megállapítnai
     hypointenseRange = (0.05, 0.14)  # (0.1, 0.25)  # Egész datasetből megállapítnai
     meanHyperThres = 0.495  # based on average from samples
@@ -36,12 +36,14 @@ class QuadTree:
 
 
         self.split((0, 0), self.image.shape, self.depth)
+        self.toMerge =  self.filterBlocks()
         self.result = self.merge()
 
         if self.debug:
             self.showDebug()
         ctx.set('roi',self.result)
         return ctx
+
     def merge(self):
         mask = np.zeros_like(self.image).astype(np.uint8)
         for area in self.toMerge:
@@ -56,6 +58,116 @@ class QuadTree:
         t[mask == 0] = 0
         return t
 
+    def filterBlocks(self):
+        modifiedImage = cv2.cvtColor(
+            cv2.normalize(inverseEnhanceImage(self.image).astype(np.float32), None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8),
+            cv2.COLOR_GRAY2BGR)
+
+        best, bestScore, rest = self.selectBestArea()
+        print()
+
+        sortedList  = sorted(rest, key=self.compareHelper(best, bestScore), reverse=True)
+        print()
+        return self.chooseBlocks(best,bestScore, sortedList)
+
+
+
+
+
+    def chooseBlocks(self,best,bestArea,sortedList):
+        mergedRegion = np.zeros_like(self.image)
+        row_start, col_start, row_length, col_length = best
+        mergedRegion[row_start:row_start + row_length, col_start:col_start + col_length] = self.image[row_start:row_start + row_length, col_start:col_start + col_length]
+
+
+
+        t=[best]
+        for area in sortedList:
+            mergedRegionTest = mergedRegion.copy()
+
+            row_start, col_start, row_length, col_length = area
+            mergedRegionTest[row_start:row_start + row_length, col_start:col_start + col_length] = self.image[row_start:row_start + row_length,col_start:col_start + col_length]
+
+
+            #ez nem feltétlenül jó hisz volt már egy max intenzitás, ami legfeljebb nőni tud
+            #a legkisebb max intenzitást érdemes nézni?
+            mergedScore = self.score(None, mergedRegionTest)[0]
+            print(mergedScore)
+            print()
+            if mergedScore>0.4:
+                mergedRegion = mergedRegionTest.copy()
+                t.append(area)
+
+        '''from matplotlib import pyplot as plt
+        plt.close()
+        plt.figure(figsize=(12,8))
+        plt.imshow(mergedRegion, cmap="gray")
+        plt.show()'''
+
+        return  t
+    def compareHelper(self, bestArea, bestScore):
+        bScore, bMask = bestScore
+        bRow, bCol, bRowLength, bColLength = bestArea
+        bCenter = (bCol+(bColLength/2) ,bRow +(bRowLength/2)   )
+        bestRegion = self.image[bRow:bRow + bRowLength, bCol:bCol + bColLength]
+        bestRegion2 = inverseEnhanceImage(self.image)[bRow:bRow + bRowLength, bCol:bCol + bColLength]
+
+
+        def cmp(area):
+            score, mask = self.score(area)
+            row_start, col_start, row_length, col_length = area
+            center = (col_start+(col_length/2), (row_start+(row_length/2)) )
+            region = self.image[row_start:row_start + row_length, col_start:col_start + col_length]
+            region2 = inverseEnhanceImage(self.image)[row_start:row_start + row_length,
+                          col_start:col_start + col_length]
+
+            mergedMask = np.zeros_like(self.image).astype(np.uint8)
+            mergedMask[bRow:bRow + bRowLength, bCol: bCol+ bColLength] = bMask
+            mergedMask[row_start:row_start + row_length, col_start: col_start+ col_length] = mask
+
+            mergedRegion = np.zeros_like(self.image)
+            mergedRegion[bRow:bRow + bRowLength, bCol: bCol+ bColLength] = bestRegion2
+            mergedRegion[row_start:row_start + row_length, col_start: col_start+ col_length] = region2
+
+            score/bScore
+
+            1-np.abs(np.max(region2) -np.max(bestRegion2))
+            alfa = 1
+            np.exp((-alfa)*np.abs(self.compactness(mask)[0] - self.compactness(bMask)[0]))
+
+
+            d_max = np.diag(self.image).shape[0]
+            k = 5#self.image.shape[0]// region.shape[0] #5
+
+            d_i = np.linalg.norm((np.array(bCenter)//[bColLength,bRowLength]) - (np.array(center)//[col_length,row_length])) #/d_max
+            #d_i = np.linalg.norm(np.array(bCenter) - np.array(center)) #/d_max
+            tau = 1.41#-np.log2(2) / 0.7 # d_max / k #0.7#np.diag(region).shape[0] / d_max  # -> kis tau = kis táv->nagyhiba
+            distanceScore = np.exp(-d_i / tau) #büntessük azt aki távolabb esik  e^(-d/t)
+
+            mergedScore = self.score(None,mergedRegion)[0]
+            mergedMaskCompactness = self.compactness(mergedMask)[0]
+            print(f"DISTANCE {distanceScore}, d_i: {d_i},\t  tau: {tau},    updatedScore: {score * distanceScore}  oldScore: {score}, mergedRegionSCore: {mergedScore}, combinedScore: {mergedScore * distanceScore}  mergedMaskCompactness: {mergedMaskCompactness}")
+
+
+            return d_i, score * distanceScore
+
+
+        return cmp
+    def selectBestArea(self):
+        best = self.toMerge[0]
+        bestScore = self.score(best)
+
+        rest = self.toMerge
+        j = 0
+        for i, area in enumerate(rest):
+            score, mask = self.score(area, None)
+            if score > bestScore[0]:
+                bestScore = (score, mask)
+                best = area
+                j = i
+        # rest.pop(j)
+
+        return best, bestScore, rest
     def split(self, start, length, depth, position='Root'):
         start_row, start_col = start
         row_length, col_length = length
@@ -200,6 +312,87 @@ class QuadTree:
         plt.imshow(self.modifiedImage)
         plt.show()
 
+
+
+    def score(self,area, region=None,):
+        if region is None:
+            row_start, col_start, row_length, col_length = area
+            region = self.image[row_start:row_start + row_length, col_start:col_start + col_length]
+            region2 = inverseEnhanceImage(self.image)[row_start:row_start + row_length, col_start:col_start + col_length]
+        else:
+            region2=region
+        rMax  = np.max(region2)
+        rMean = np.mean(region2)
+        rStd = np.std(region2)
+        rP95Int= np.percentile(region2, 95)
+        hist, _ = np.histogram(region2, bins=32, range=(region2.min(), region2.max()))
+        p = hist / np.sum(hist) if np.sum(hist) > 0 else hist
+        entropy = -np.sum(p * np.log2(p + 1e-9))
+
+
+
+        norm_region = cv2.normalize(region2, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+        thresh, _ = cv2.threshold(norm_region[norm_region>0],0,255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+        mask = np.zeros_like(norm_region)
+        mask[norm_region>thresh] = 255
+
+
+
+
+        compactness, perimeter, area, contourImage = self.compactness(mask)
+
+        alfa = 1 #[0-1]
+        C_score = np.exp(-alfa * np.abs(compactness-1))   #---> 1 helyen 1 minden máshol 1 alatt vesz fel értéket
+
+        beta=2#3.6
+        gamma=0.8
+
+        score = ( np.power(rMax,beta) ) * np.power(C_score,gamma)   # beta,gamma---> fontossága a változóknak --> kisebb 1 ->drasztikusan csökken az érték
+
+
+        '''if self.debug:
+            from matplotlib import pyplot as plt
+            plt.figure(figsize=(8, 6), frameon=False)
+            plt.subplot(1,4,1)
+            plt.imshow(inverseEnhanceImage(region), cmap="gray")
+            plt.title(f"thresh {thresh}")#(f"rMax {rMax}, rMean {rMean}, rStd {rStd}, rP95Int {rP95Int}")
+            plt.subplot(1,4,2)
+            plt.imshow(mask, cmap="gray")
+            plt.subplot(1, 4, 3)
+            plt.title(str("%.2f" % perimeter) + "  a   "+ str("%.2f" % area))
+            plt.imshow(contourImage, cmap="gray")
+            #plt.subplot(1,4,4)
+            #plt.imshow(edges, cmap="gray")
+            #plt.subplot(1,4,4)
+            #plt.imshow(edges)
+            plt.show(block = True)
+        '''
+        print(f"rMax {rMax}, rMean {rMean}, rStd {np.std(region2[mask==255])}, rP95Int {rP95Int},  ENTROPY {entropy}, thresh {thresh}, compactness {'%.2f'%compactness}, SCORE {score}")
+
+
+
+        return score, mask
+    def compactness(self, mask):
+
+        contourImage = np.zeros_like(mask)
+        contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+
+        perimeter = 0
+        for c in contours:
+            perimeter += cv2.arcLength(c, True)
+        cv2.drawContours(contourImage, contours, -1, 255, thickness=cv2.FILLED)
+
+        area = np.count_nonzero(mask)
+
+        compactness = np.inf
+        if area > 0:
+            compactness = (perimeter ** 2) / (
+                        4 * np.pi * area)  # normalized version-->close to 1 (orig: p^2 / a --> close to 4pi)
+        return compactness, perimeter, area, contourImage
+
+
     def loadParams(self,ctx):
         self.depth = ctx.params.get("qt:depth",self.depth)
 
@@ -218,3 +411,4 @@ class QuadTree:
         self.sumHypoThres = ctx.params.get("qt:sumHypoThresh", self.sumHypoThres)
 
         return
+

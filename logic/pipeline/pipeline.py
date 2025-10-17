@@ -4,7 +4,7 @@ class Pipeline:
         self.seedSelector = seedSelector
         self.seedFilters = seedFilters
         self.regionGrowing = regionGrowing
-
+        self.controls = []
     def run(self, ctx):
         #ctx = PipelineContext(image)
         for step in self.preprocessing:
