@@ -5,7 +5,7 @@ import numpy as np
 Az lenne a cél, hogy a szélekhez eső seedpontokat kivesszük,
  egy homogénebb/simább területeken levőket hagyjuk meg
 '''
-class gradientSeedFilter:
+class GradientSeedFilter:
 
     def __init__(self):
         self.debug=False
@@ -26,8 +26,7 @@ class gradientSeedFilter:
 
         # filter seeds
         selected_seeds = []
-        for y, x in seeds:
-            # flat area and bright area
+        for x, y in seeds:
             if sobel_magnitude[y, x] < edge_threshold and img[y, x] > brightness_threshold:
                 selected_seeds.append((x, y))
 
@@ -41,7 +40,7 @@ class gradientSeedFilter:
         brightness_threshold = np.percentile(img, 60)
         # filter seeds
         selected_seeds2 = []
-        for y, x in seeds:
+        for x, y in seeds:
             # flat area and bright area
             if scharr_magnitude[y, x] < edge_threshold and img[y, x] > brightness_threshold:
                 selected_seeds2.append((x, y))
@@ -49,22 +48,22 @@ class gradientSeedFilter:
         selected_seeds2 = np.array(selected_seeds2)
 
         if self.debug:
-            self.showDebug(img,sobel_magnitude,scharr_magnitude,selected_seeds,selected_seeds2)
+            self.showDebug(img,sobel_magnitude,scharr_magnitude,selected_seeds,selected_seeds2,seeds)
 
         ctx.set('seeds',selected_seeds)
 
         return ctx
 
-    def showDebug(self,img,sobel_magnitude,scharr_magnitude,selected_seeds,selected_seeds2):
+    def showDebug(self,img,sobel_magnitude,scharr_magnitude,selected_seeds,selected_seeds2,seeds):
         from matplotlib import pyplot as plt
         plt.figure(figsize=(12, 8))
         plt.subplot(2, 2, 1)
         plt.imshow(sobel_magnitude)
-        plt.title("sobel img")
+        plt.title(f"sobel img {len(selected_seeds)}/{len(seeds)}")
 
         plt.subplot(2, 2, 2)
         plt.imshow(scharr_magnitude)
-        plt.title("scharr img")
+        plt.title(f"scharr img {len(selected_seeds2)}/{len(seeds)}")
 
         if len(selected_seeds) > 0:
             plt.subplot(2, 2, 3)
@@ -74,3 +73,4 @@ class gradientSeedFilter:
             plt.subplot(2, 2, 4)
             plt.imshow(img, cmap="gray")
             plt.scatter(x=selected_seeds2[:, 0], y=selected_seeds2[:, 1], c="red")
+        plt.show()

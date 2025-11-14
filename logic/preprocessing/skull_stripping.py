@@ -26,21 +26,26 @@ class SkullStripping:
         return se,bw
 
     def selectLargestBinaryImg(self,bw):
-        contours, _ = cv2.findContours(bw.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        largest_contour = max(contours, key=cv2.contourArea)
-        largest_blob_mask = np.zeros(bw.shape, dtype=np.uint8)
 
-        cv2.drawContours(largest_blob_mask, [largest_contour], -1, 255, thickness=cv2.FILLED)
-        return largest_blob_mask
+        numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(bw.astype(np.uint8), connectivity=8)
+        largestLabel = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+
+        largestComponent = np.zeros_like(bw)
+        largestComponent[labels == largestLabel] = 255
+
+
+        return largestComponent
 
     def fillHoles(self, bw, se, largest_blob_mask, start_point=(0,0)):
         mask = np.zeros((bw.shape[0] + 2, bw.shape[1] + 2), dtype=np.uint8)
-        retval, resImage, bw, rect = cv2.floodFill(bw, mask, start_point, 255, 30, 30,
-                                                   flags=4 | cv2.FLOODFILL_FIXED_RANGE | cv2.FLOODFILL_MASK_ONLY | (
-                                                           255 << 8))
+        inputMask = bw.copy().astype(np.uint8)
+        cv2.floodFill(inputMask, mask, start_point, 255)
 
-        bw = cv2.morphologyEx(largest_blob_mask, cv2.MORPH_CLOSE, se)
-        return bw
+        inputMaskInv = cv2.bitwise_not(inputMask)
+        outImg = cv2.bitwise_or(bw.astype(np.uint8), inputMaskInv)
+
+
+        return outImg
 
     def process(self, ctx):
         self.debug = ctx.get('debug',False)
@@ -50,57 +55,43 @@ class SkullStripping:
 
         ''' Threshold the image '''
         bw = self.thresholdImage(img,orig_thres,norm_img,thres)
+        from matplotlib import pyplot as plt
+
         if self.debug:
-
-            from matplotlib import pyplot as plt
-
             plt.figure(figsize=(12, 8))
-
-            plt.subplot(2, 4, 1)
-            plt.imshow(norm_img, cmap='gray')
-            plt.title("Original Norm")
-
-            plt.subplot(2, 4, 2)
-            plt.imshow(bw, cmap='gray')
-            plt.title("Otsu mask")
+            self.showStep(plt, 1, norm_img, "Original Norm")
+            self.showStep(plt, 2, bw, "Otsu mask")
 
         ''' Open the binary image using a disk structuring Seed '''
         se, bw = self.diskStructuring(bw)
         if self.debug:
-            plt.subplot(2, 4, 3)
-            plt.imshow(bw, cmap='binary')
-            plt.title("Opening")
+            self.showStep(plt, 3, bw, "Opening")
+
         '''5: Dilate the binary image'''
         bw = cv2.morphologyEx(bw, cv2.MORPH_DILATE, se)
         if self.debug:
-            plt.subplot(2, 4, 4)
-            plt.imshow(bw, cmap='binary')
-            plt.title("Dilate")
+            self.showStep(plt, 4, bw, "Dilate")
 
         '''6: Select the largest binary image'''
         largest_blob_mask = self.selectLargestBinaryImg(bw)
         if self.debug:
-            plt.subplot(2, 4, 5)
-            plt.imshow(largest_blob_mask, cmap='binary')
-            plt.title("largest_blob")
-        ''' 7: Dilate the binary image ''' '''     BW ← imclose(BW,se) --->?'''
+            self.showStep(plt, 5, largest_blob_mask, "largest blob")
+
+        ''' 7: Close the binary image ''' '''     BW ← imclose(BW,se) --->?'''
         bw = cv2.morphologyEx(largest_blob_mask, cv2.MORPH_CLOSE, se)
         if self.debug:
-            plt.subplot(2, 4, 6)
-            plt.imshow(bw, cmap='binary')
-            plt.title("IMCLOSE")
+            self.showStep(plt, 6, bw, "IMCLOSE")
+
         ''' 8: Fill holes on the binary image ''' '''BW ← imfill(BW,se)'''
         bw = self.fillHoles(bw, se, largest_blob_mask)
         if self.debug:
-            plt.subplot(2, 4, 7)
-            plt.imshow(bw, cmap='binary')
-            plt.title("IMFILL")
+            self.showStep(plt, 7, bw, "IMFILL")
+
         ''' 9: Remove the skull '''   ''''stripped ← im(!BW) = 0'''
         norm_img[~bw.astype(bool)] = 0
         if self.debug:
-            plt.subplot(2, 4, 8)
-            plt.imshow(norm_img, cmap='gray')
-            plt.title("Stripped norm_img")
+            self.showStep(plt, 8, norm_img, "Stripped norm_img")
+
 
         img[~bw.astype(bool)] = 0
         norm_img[~bw.astype(bool)] = 0
@@ -108,3 +99,8 @@ class SkullStripping:
             plt.show(block=True)
         ctx.set('roi',img)
         return ctx  # norm_img
+
+    def showStep(self, plt, i, img, title):
+        plt.subplot(2, 4, i)
+        plt.imshow(img, cmap='gray')
+        plt.title(title)

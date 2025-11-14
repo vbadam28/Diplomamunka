@@ -3,14 +3,15 @@ from gui.controls.quad_tree_control import QuadTreeControl
 from gui.controls.sliding_window_control import SlidingWindowControl
 from gui.controls.window_seed_selector_control import WindowSeedSelectorControl
 from logic.pipeline.pipeline import Pipeline
-from logic.preprocessing.enhanced_quad_tree import EnhancedQuadTree
+from logic.preprocessing.enhanced_split_merge import EnhancedSplitMerge
 from logic.preprocessing.preprocessing_step import PreprocessingStep, enhanceImage, normalize, gaussianBlur
 from logic.preprocessing.skull_stripping import SkullStripping
-from logic.preprocessing.quad_tree import QuadTree
+from logic.preprocessing.split_merge import SplitMerge
 from logic.preprocessing.sliding_window import SlidingWindow
 from logic.region_growing.acc_opencv_region_growing import AccOpenCVRegionGrowing
 from logic.region_growing.opencv_region_growing import OpenCVRegionGrowing
 from logic.region_growing.opt_threshold_acc_region_growing import OptThresholdAccRegionGrowing
+from logic.seed_filter.gradient_seed_filter import GradientSeedFilter
 from logic.seed_selector.block_based_seed_selector import BlockBasedSeedSelector
 from logic.seed_selector.divergence_seed_selector import DivergenceSeedSelector
 from logic.seed_selector.gmm_seed_selector import GmmSeedSelector
@@ -60,7 +61,7 @@ class PipelineFactory:
     @staticmethod
     def divergenceSeeds():
         p = Pipeline(
-            preprocessing=[PreprocessingStep(normalize), PreprocessingStep(enhanceImage),QuadTree()],
+            preprocessing=[PreprocessingStep(normalize), PreprocessingStep(enhanceImage), SplitMerge()],
             seedSelector=DivergenceSeedSelector(),
             seedFilters=[],
             regionGrowing=OptThresholdAccRegionGrowing()
@@ -71,22 +72,21 @@ class PipelineFactory:
     @staticmethod
     def enhancedDivergence():
         p = Pipeline(
-            preprocessing=[PreprocessingStep(normalize), PreprocessingStep(enhanceImage), EnhancedQuadTree(),],
+            preprocessing=[PreprocessingStep(normalize), PreprocessingStep(enhanceImage), EnhancedSplitMerge(), ],
             seedSelector=DivergenceSeedSelector(),
-            seedFilters=[],
+            seedFilters=[GradientSeedFilter()],
             regionGrowing=OptThresholdAccRegionGrowing()
         )
         p.controls = [QuadTreeControl]
         return p
 
     ''' 
-        Preporcessingben,
-        (akár lehetne a gradient nél is, mert elég zajos az a histogram)
+        Preporcessingben
     '''
     @staticmethod
     def divergenceSeedsWithGaussianBlur():
         p = Pipeline(
-            preprocessing=[PreprocessingStep(normalize), PreprocessingStep(gaussianBlur), PreprocessingStep(enhanceImage), QuadTree()],
+            preprocessing=[PreprocessingStep(normalize), PreprocessingStep(gaussianBlur), PreprocessingStep(enhanceImage), SplitMerge()],
             seedSelector=DivergenceSeedSelector(),
             seedFilters=[],
             regionGrowing=OptThresholdAccRegionGrowing()
@@ -101,7 +101,7 @@ class PipelineFactory:
     def splitmergeGmm():
 
         p = Pipeline(
-            preprocessing=[PreprocessingStep(normalize),PreprocessingStep(enhanceImage), QuadTree()],
+            preprocessing=[PreprocessingStep(normalize), PreprocessingStep(enhanceImage), SplitMerge()],
             seedSelector=GmmSeedSelector(),
             seedFilters=[],
             regionGrowing=OptThresholdAccRegionGrowing()#AccOpenCVRegionGrowing()

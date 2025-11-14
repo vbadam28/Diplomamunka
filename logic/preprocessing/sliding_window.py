@@ -1,6 +1,6 @@
 from collections import namedtuple
 import numpy as np
-
+from scipy.ndimage import maximum_filter
 
 Window = namedtuple("Window", ["x", "y", "w", "h", "score"])
 class SlidingWindow:
@@ -106,10 +106,8 @@ class SlidingWindow:
 
         return kept
     def nonMaxSupression2(self,scoreMap,size=3, th=0):
-        from scipy.ndimage import  maximum_filter
         localMax = maximum_filter(scoreMap,size=size) == scoreMap
         maxima = np.argwhere(localMax & (scoreMap>th))
-
         return maxima
 
 

@@ -11,25 +11,25 @@ class OptThresholdAccRegionGrowing(RegionGrowingStrategy):
     def regionGrowing(self, image, seed, optimal_threshold):
         firstSeed = seed
 
-        regionMean = image[firstSeed[0], firstSeed[1]]
+        regionMean = image[firstSeed[1], firstSeed[0]]
 
         segmented = np.zeros_like(image, dtype=np.uint8)
-        segmented[firstSeed[0], firstSeed[1]] = 1
+        segmented[firstSeed[1], firstSeed[0]] = 1
 
         queue = deque([tuple(firstSeed)])  # list(map(tuple, [firstSeed]))
 
         intensitySum = regionMean
         count = 1
         while len(queue) > 0:
-            y, x = queue.popleft()  # queue.pop(0)
+            x, y = queue.popleft()  # queue.pop(0)
 
-            for dy, dx in [(-1, 0), (0, -1), (1, 0), (0, 1)]:
+            for dx, dy in [(-1, 0), (0, -1), (1, 0), (0, 1)]:
                 if 0 <= (y + dy) < image.shape[0] and 0 <= (x + dx) < image.shape[1] and not segmented[
                     y + dy, x + dx]:  # valid offset to check
                     intensity = image[y + dy, x + dx]
                     if (np.abs(intensity - regionMean) >= np.abs(regionMean - optimal_threshold)):
                         continue
-                    queue.append((y + dy, x + dx))
+                    queue.append((x + dx, y + dy))
                     segmented[y + dy, x + dx] = 1
                     intensitySum += intensity
                     count += 1
@@ -45,7 +45,7 @@ class OptThresholdAccRegionGrowing(RegionGrowingStrategy):
         accumulatedMask = np.zeros_like(image)
         for seed in seeds:
             if accumulatedMask[
-                seed[0], seed[1]] == 1:  # Ha még nem tartozik hozzá egy segmented régióhoz se akkor kell csak számolni
+                seed[1], seed[0]] == 1:  # Ha még nem tartozik hozzá egy segmented régióhoz se akkor kell csak számolni
                 continue
             segmented = self.regionGrowing(image, seed, optimal_threshold)
             accumulatedMask[segmented == 1] = 1

@@ -18,7 +18,7 @@ class BlockBasedSeedSelector(SeedSelector):#for first method
                 Collect the mean of each block
                 Collect the centers of each block
         '''
-        width = resized_im.shape[0] if resized_im.shape[0] % 8 == 0 else 256  # btw resize img kéne
+        width = resized_im.shape[0] if resized_im.shape[0] % 8 == 0 else 256
         height = resized_im.shape[1] if resized_im.shape[1] % 8 == 0 else 256
         if width == 256 or height == 256:
             resized_im = cv2.resize(img, [256, 256])
@@ -27,11 +27,11 @@ class BlockBasedSeedSelector(SeedSelector):#for first method
 
         mIs = []
         cBs = []
-        for i in range(0, width, 8):
-            for j in range(0, height, 8):
-                block = resized_im[i:i + 8, j:j + 8]
+        for y in range(0, height, 8):
+            for x in range(0, width, 8):
+                block = resized_im[y:y + 8, x:x + 8]
                 mIs.append(np.mean(block))
-                cBs.append((j + 3, i + 3))
+                cBs.append((x + 3, y + 3))
 
         ''' 10: Select top 5 blocks based on the intensity '''
 

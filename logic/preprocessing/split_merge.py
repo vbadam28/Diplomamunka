@@ -4,7 +4,7 @@ import numpy as np
 from logic.preprocessing.preprocessing_step import inverseEnhanceImage
 
 
-class QuadTree:
+class SplitMerge:
     hyperintenseRange = (0.8, 1.0)  # (0.47, 0.8)  # Egész datasetből megállapítnai
     hypointenseRange = (0.05, 0.14)  # (0.1, 0.25)  # Egész datasetből megállapítnai
     meanHyperThres = 0.495  # based on average from samples

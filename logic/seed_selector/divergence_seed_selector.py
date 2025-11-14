@@ -10,7 +10,8 @@ class DivergenceSeedSelector(SeedSelector):
 
     def calcRoiHistogram(self,region):
         hist, bin_edges = np.histogram(region, bins=256, range=(0.0, 1.0))
-        hist[0] = 0  # ha üres terület belelóg nem érdekel (divergence-nél is negatív lenne)
+        hist[0] = 0  # ha üres terület belelóg nem érdekel
+
         return  hist, bin_edges
 
     def setOptimalThreshold(self,div,bin_edges):
@@ -31,16 +32,19 @@ class DivergenceSeedSelector(SeedSelector):
         hist, bin_edges = self.calcRoiHistogram(region)
 
         ''' 2. Calc Divergence '''
-        div = np.gradient(hist)
+        P = hist / np.sum(hist)
+        div = np.gradient(hist) * P
 
         ''' 3. Set optimal threshold'''
         idx,tail, nearest_zero, optimal_threshold_idx,optimal_threshold = self.setOptimalThreshold(div,bin_edges)
+
         if self.debug:
             self.showOptThreshold(hist,bin_edges,div,idx,optimal_threshold_idx)
         ''' 4. Automatic seed selection'''
         mask = np.zeros_like(image)
         mask[region >= bin_edges[nearest_zero + 1 + idx]] = 1
         seeds = np.argwhere(mask == 1)  # (row,col ) (y,x)
+        seeds= seeds[:, ::-1]  # (x,y)
 
         if self.debug:
             self.showSeeds(image, region,mask)
@@ -56,11 +60,13 @@ class DivergenceSeedSelector(SeedSelector):
         plt.plot(hist)
         plt.title("histogram")
         plt.xticks(np.arange(0, 256, 50), np.round(bin_edges[np.arange(0, 256, 50)], 2))
+
         plt.subplot(1, 2, 2)
         plt.plot(div)
         plt.xticks(np.arange(0, 256, 50), np.round(bin_edges[np.arange(0, 256, 50)], 2))
         plt.scatter(idx, div[idx], c="red")
         plt.scatter(optimal_threshold_idx, div[optimal_threshold_idx], c="green")
+
         plt.title(f"Divergence, Thres: ({bin_edges[optimal_threshold_idx]},{div[optimal_threshold_idx]})")
 
         plt.show()
