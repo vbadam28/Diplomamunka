@@ -1,5 +1,5 @@
 from gui.controls.cv_region_growing_control import CVRegionGrowingControl
-from gui.controls.quad_tree_control import QuadTreeControl
+from gui.controls.split_merge_control import SplitMergeControl
 from gui.controls.sliding_window_control import SlidingWindowControl
 from gui.controls.window_seed_selector_control import WindowSeedSelectorControl
 from logic.pipeline.pipeline import Pipeline
@@ -66,7 +66,7 @@ class PipelineFactory:
             seedFilters=[],
             regionGrowing=OptThresholdAccRegionGrowing()
         )
-        p.controls = [QuadTreeControl]
+        p.controls = [SplitMergeControl]
         return p
 
     @staticmethod
@@ -77,7 +77,7 @@ class PipelineFactory:
             seedFilters=[GradientSeedFilter()],
             regionGrowing=OptThresholdAccRegionGrowing()
         )
-        p.controls = [QuadTreeControl]
+        p.controls = [SplitMergeControl]
         return p
 
     ''' 

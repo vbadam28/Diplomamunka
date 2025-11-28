@@ -157,6 +157,7 @@ class MainWindow(QMainWindow):
             self.slice = 0
             self.origImagePlaceholder.images = self.image
 
+
         self.origImagePlaceholder.displayImage()
 
 

@@ -7,6 +7,7 @@ class Pipeline:
         self.controls = []
     def run(self, ctx):
         #ctx = PipelineContext(image)
+
         for step in self.preprocessing:
             ctx = step.process(ctx)
 

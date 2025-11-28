@@ -58,7 +58,7 @@ class SkullStripping:
         from matplotlib import pyplot as plt
 
         if self.debug:
-            plt.figure(figsize=(12, 8))
+            plt.figure(constrained_layout = True, figsize=(12, 8))
             self.showStep(plt, 1, norm_img, "Original Norm")
             self.showStep(plt, 2, bw, "Otsu mask")
 
@@ -96,6 +96,7 @@ class SkullStripping:
         img[~bw.astype(bool)] = 0
         norm_img[~bw.astype(bool)] = 0
         if self.debug:
+            #plt.tight_layout(pad=2.0, rect=[0,0,1,0.95])
             plt.show(block=True)
         ctx.set('roi',img)
         return ctx  # norm_img
@@ -103,4 +104,5 @@ class SkullStripping:
     def showStep(self, plt, i, img, title):
         plt.subplot(2, 4, i)
         plt.imshow(img, cmap='gray')
+        plt.axis("off")
         plt.title(title)

@@ -33,7 +33,33 @@ class DivergenceSeedSelector(SeedSelector):
 
         ''' 2. Calc Divergence '''
         P = hist / np.sum(hist)
+
         div = np.gradient(hist) * P
+        '''from matplotlib import pyplot as plt
+        plt.figure()
+
+        plt.plot(np.gradient(hist) * P,alpha=0.5)
+        '''
+
+        '''smooth_sigma = 1
+        r = int(3 * smooth_sigma) +1
+        x = np.arange(-r,r+1)
+        kernel = np.exp(-(x**2) / (2.0 * smooth_sigma **2))
+        kernel = kernel / kernel.sum()
+        P = np.convolve(P, kernel, mode='same' )
+        '''
+
+        '''
+        plt.plot(div*10000, alpha=0.5)
+        plt.plot(np.gradient(hist) * P,alpha=0.5)
+
+        plt.legend(["gradient","div","b","c"])
+
+        plt.title("histogram")
+        plt.xticks(np.arange(0, 256, 50), np.round(bin_edges[np.arange(0, 256, 50)], 2))
+        plt.show()
+        '''
+
 
         ''' 3. Set optimal threshold'''
         idx,tail, nearest_zero, optimal_threshold_idx,optimal_threshold = self.setOptimalThreshold(div,bin_edges)
@@ -64,8 +90,8 @@ class DivergenceSeedSelector(SeedSelector):
         plt.subplot(1, 2, 2)
         plt.plot(div)
         plt.xticks(np.arange(0, 256, 50), np.round(bin_edges[np.arange(0, 256, 50)], 2))
-        plt.scatter(idx, div[idx], c="red")
-        plt.scatter(optimal_threshold_idx, div[optimal_threshold_idx], c="green")
+        plt.scatter(idx, div[idx], c="green")
+        plt.scatter(optimal_threshold_idx, div[optimal_threshold_idx], c="red")
 
         plt.title(f"Divergence, Thres: ({bin_edges[optimal_threshold_idx]},{div[optimal_threshold_idx]})")
 

@@ -5,21 +5,18 @@ from logic.preprocessing.preprocessing_step import inverseEnhanceImage
 
 
 class SplitMerge:
-    hyperintenseRange = (0.8, 1.0)  # (0.47, 0.8)  # Egész datasetből megállapítnai
+    hyperintenseRange = (0.82, 1.0)  # (0.47, 0.8)  # Egész datasetből megállapítnai
     hypointenseRange = (0.05, 0.14)  # (0.1, 0.25)  # Egész datasetből megállapítnai
-    meanHyperThres = 0.495  # based on average from samples
-    meanHypoThres = 0.2  # based on average from samples
-    sumHyperThres = 30  # from our dataset
+    meanHyperThres =  0.842 #0.495  # based on average from samples
+    meanHypoThres = 0.09  # based on average from samples
+    sumHyperThres = 300  # from our dataset
     sumHypoThres = 100  # from our dataset
 
     colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0), (255, 0, 255), (0, 255, 255), (255, 255, 255)]
 
-    def __init__(self, depth=3, options = None):
+    def __init__(self, depth=3):
 
         self.depth = depth
-        self.options = options
-        self.regionFeatures = []
-        self.leafs = []
         self.toMerge = []
 
 
@@ -87,31 +84,43 @@ class SplitMerge:
 
         region = self.image[start_row:start_row + row_length, start_col:start_col + col_length]
 
-        hist, bin_edges = np.histogram(region, bins=256, range=(0.0, 1.0), density=True)
-        norm_hist, norm_bin_edges = np.histogram(region, bins=256, range=(0.0, 1.0))
+        hist, bin_edges = np.histogram(region, bins=256, range=(0.0, 1.0))
 
-        bin_width = bin_edges[1] - bin_edges[0]
-        P = hist * bin_width
+        bin_centers = (bin_edges[:-1]+bin_edges[1:]) / 2
+        low, high = self.hyperintenseRange
+        maskHyper = (bin_centers>=low) & (bin_centers<=high)
+        #maskHyper = (bin_edges[:-1] >= low) & (bin_edges[1:] <= high)
+        sum = np.sum(bin_centers[maskHyper] * hist[maskHyper])
+        N = np.sum(hist[maskHyper])
+        avgHyper = stddev = entropy = 0
+        if N!=0:
+            avgHyper = sum / N
+            #szórás
+            meanSq = np.sum((bin_centers[maskHyper] ** 2) * hist[maskHyper]) / N
+            var = meanSq - avgHyper **2
+            stddev = np.sqrt(var)
+            #entropy
+            nonzero = hist[maskHyper]>0
+            p = hist[maskHyper][nonzero] / np.sum(hist[maskHyper][nonzero])
+            entropy = -np.sum(p * np.log2(p))
 
-        hyperMask = P[
-            ((bin_edges >= self.hyperintenseRange[0])[:-1] & (bin_edges <= self.hyperintenseRange[1])[:-1])]
-        hypoMask = hist[int(self.hypointenseRange[0] * 256): int(self.hypointenseRange[1] * 256)]
+        low, high = self.hypointenseRange
+        maskHypo = (bin_centers >= low) & (bin_centers <= high)
+        #maskHypo = (bin_edges[:-1] >= low) & (bin_edges[1:] <= high)
+        sum = np.sum(bin_centers[maskHypo] * hist[maskHypo])
+        N = np.sum(hist[maskHypo])
+        avgHypo = 0
 
-        hyperMaskNorm = norm_hist[
-            ((bin_edges >= self.hyperintenseRange[0])[:-1] & (bin_edges <= self.hyperintenseRange[1])[:-1])]
-        hypoMaskNorm = norm_hist[int(self.hypointenseRange[0] * 256): int(self.hypointenseRange[1] * 256)]
-
-        meanHyper = np.mean(hyperMask)  # 0.495
-        meanHypo = np.mean(hypoMask)  # 0.2
-
-        return {"mean": meanHyper, \
-                "numof": np.sum(hyperMaskNorm), \
-                "std": np.std(hyperMask), \
-                "entropy": -np.sum(P[P > 0] * np.log2(P[P > 0])), \
-                "split 1": (meanHyper > self.meanHyperThres), \
-                "split 2": (meanHyper <= self.meanHyperThres and np.sum(hyperMaskNorm) > self.sumHyperThres), \
-                "split": ((meanHyper > self.meanHyperThres) or (
-                        meanHyper <= self.meanHyperThres and np.sum(hyperMaskNorm) > self.sumHyperThres)) \
+        if N != 0:
+            avgHypo = sum / N
+        return {"mean": avgHyper, \
+                "numof": np.sum(hist[maskHyper]), \
+                "std": np.std(stddev), \
+                "entropy": entropy, \
+                "split 1": (avgHyper > self.meanHyperThres), \
+                "split 2": (avgHyper <= self.meanHyperThres and np.sum(hist[maskHyper]) > self.sumHyperThres), \
+                "split": ((avgHyper > self.meanHyperThres) or (
+                        avgHyper <= self.meanHyperThres and np.sum(hist[maskHyper]) > self.sumHyperThres)) \
                 }
 
     def isHomogen(self, start, length, position='', depth=100):
@@ -121,33 +130,34 @@ class SplitMerge:
 
         region = self.image[start_row:start_row + row_length, start_col:start_col + col_length]
 
-        hist, bin_edges = np.histogram(region, bins=256, range=(0.0, 1.0), density=True)
-        norm_hist, norm_bin_edges = np.histogram(region, bins=256, range=(0.0, 1.0))
+        hist, bin_edges = np.histogram(region, bins=256, range=(0.0, 1.0))
+        hist[0]=0
+        avgHyper, sumHyper = self.getMeanSumIntensity(hist,bin_edges,self.hyperintenseRange)
+        avgHypo, sumHypo = self.getMeanSumIntensity(hist,bin_edges,self.hypointenseRange)
 
-        bin_width = bin_edges[1] - bin_edges[0]
-        P = hist * bin_width
+        if (avgHyper > self.meanHyperThres) or (
+                avgHyper <= self.meanHyperThres and sumHyper > self.sumHyperThres):
 
-        # hyperMask = hist[int((self.hyperintenseRange[0] * 256)): int((self.hyperintenseRange[1] * 256))]
-        # hypoMask = hist[int(self.hypointenseRange[0] * 256): int(self.hypointenseRange[1] * 256)]
-        hyperMask = P[
-            ((bin_edges >= self.hyperintenseRange[0])[:-1] & (bin_edges <= self.hyperintenseRange[1])[:-1])]
-        hypoMask = P[((bin_edges >= self.hypointenseRange[0])[:-1] & (bin_edges <= self.hypointenseRange[1])[:-1])]
+            return False
+        if (avgHypo <= self.meanHypoThres and avgHypo > 1e-9 and sumHypo>10) or (
+                avgHypo > self.meanHypoThres and sumHypo > self.sumHypoThres):
 
-        hyperMaskNorm = norm_hist[
-            ((bin_edges >= self.hyperintenseRange[0])[:-1] & (bin_edges <= self.hyperintenseRange[1])[:-1])]
-        hypoMaskNorm = norm_hist[int(self.hypointenseRange[0] * 256): int(self.hypointenseRange[1] * 256)]
-
-        meanHyper = np.mean(hyperMask)  # 0.495
-        meanHypo = np.mean(hypoMask)  # 0.2
-
-        if (meanHyper > self.meanHyperThres) or (
-                meanHyper <= self.meanHyperThres and np.sum(hyperMaskNorm) > self.sumHyperThres):
-            return False  # SPLITELNI SZABAD
-        if (meanHypo <= self.meanHypoThres and meanHypo != 0) or (
-                meanHypo > self.meanHypoThres and np.sum(hypoMaskNorm) > self.sumHypoThres):
-            return False  # SPLITELNI SZABAD
+            return False
 
         return True
+
+    def getMeanSumIntensity(self,hist,bin_edges,intensityRange):
+        low, high = intensityRange
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        mask = (bin_centers >= low) & (bin_centers <= high)
+        mask = (bin_edges[:-1] >= low) & (bin_edges[1:] <= high)
+        sum = np.sum(bin_centers[mask] * hist[mask])
+        N = np.sum(hist[mask])
+        avgHyper = 0
+        if N != 0:
+            avgHyper = sum / N
+
+        return avgHyper, N
 
     def drawOnImage(self,start_row,row_length,start_col,col_length,depth):
         top_left = self.image[start_row:start_row + row_length // 2, start_col:start_col + col_length // 2]
