@@ -36,14 +36,13 @@ class SkullStripping:
 
         return largestComponent
 
-    def fillHoles(self, bw, se, largest_blob_mask, start_point=(0,0)):
+    def fillHoles(self, bw, start_point=(0,0)):
         mask = np.zeros((bw.shape[0] + 2, bw.shape[1] + 2), dtype=np.uint8)
         inputMask = bw.copy().astype(np.uint8)
         cv2.floodFill(inputMask, mask, start_point, 255)
 
         inputMaskInv = cv2.bitwise_not(inputMask)
         outImg = cv2.bitwise_or(bw.astype(np.uint8), inputMaskInv)
-
 
         return outImg
 
@@ -83,7 +82,7 @@ class SkullStripping:
             self.showStep(plt, 6, bw, "IMCLOSE")
 
         ''' 8: Fill holes on the binary image ''' '''BW ← imfill(BW,se)'''
-        bw = self.fillHoles(bw, se, largest_blob_mask)
+        bw = self.fillHoles(bw)
         if self.debug:
             self.showStep(plt, 7, bw, "IMFILL")
 
@@ -97,7 +96,7 @@ class SkullStripping:
         norm_img[~bw.astype(bool)] = 0
         if self.debug:
             #plt.tight_layout(pad=2.0, rect=[0,0,1,0.95])
-            plt.show(block=True)
+            plt.show()
         ctx.set('roi',img)
         return ctx  # norm_img
 

@@ -32,6 +32,6 @@ class SplitMergeControl(ControlPanel):
         self.addFloatControl(layout, "Mean Hyper Threshold", [0, 1], self.ctx.params.get("qt:meanHyperTresh", 0.842), "qt:meanHyperTresh")
         self.addFloatControl(layout, "Mean Hypo Threshold", [0, 1], self.ctx.params.get("qt:meanHypoTresh", 0.09), "qt:meanHypoTresh")
 
-        self.addIntControl(layout, "Sum Hyper Thres", [1, 1000], self.ctx.params.get("qt:sumHyperThresh", 300), "qt:sumHyperThresh")
-        self.addIntControl(layout, "Sum Hypo Thres", [1, 200], self.ctx.params.get("qt:sumHypoThresh", 100), "qt:sumHypoThresh")
+        self.addIntControl(layout, "Sum Hyper Threshold", [1, 1000], self.ctx.params.get("qt:sumHyperThresh", 300), "qt:sumHyperThresh")
+        self.addIntControl(layout, "Sum Hypo Threshold", [1, 200], self.ctx.params.get("qt:sumHypoThresh", 100), "qt:sumHypoThresh")
 

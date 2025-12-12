@@ -1,10 +1,6 @@
 import cv2
 import numpy as np
 
-'''
-Az lenne a cél, hogy a szélekhez eső seedpontokat kivesszük,
- egy homogénebb/simább területeken levőket hagyjuk meg
-'''
 class GradientSeedFilter:
 
     def __init__(self):
@@ -16,61 +12,61 @@ class GradientSeedFilter:
         img = ctx.get('image')
         seeds = ctx.get('seeds')
 
-        grad_x_sobel = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y_sobel = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
-        # grad_y_sobel = ndimage.sobel(img, axis=0)
-        sobel_magnitude = np.hypot(grad_x_sobel, grad_y_sobel)
+        gradX = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
+        gradY = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
+        # gradY = ndimage.sobel(img, axis=0)
+        sobel = np.hypot(gradX, gradY)
 
-        edge_threshold = np.percentile(sobel_magnitude, 80)
-        brightness_threshold = np.percentile(img, 60)
 
-        # filter seeds
-        selected_seeds = []
+        sobelBlur = cv2.GaussianBlur(sobel, (7, 7), 0)
+        edgeMask = (sobel > sobelBlur * 1.5).astype(np.uint8)
+        edgeMaskDil = cv2.dilate(edgeMask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5)))
+
+
+        seedMask = np.zeros_like(img, dtype=np.uint8)
         for x, y in seeds:
-            if sobel_magnitude[y, x] < edge_threshold and img[y, x] > brightness_threshold:
-                selected_seeds.append((x, y))
+            seedMask[y, x] = 1
 
-        selected_seeds = np.array(selected_seeds)
+        filtered = seedMask & (1 - edgeMaskDil)
 
-        grad_x_sharr = cv2.Scharr(img, cv2.CV_64F, 1, 0)
-        grad_y_sharr = cv2.Scharr(img, cv2.CV_64F, 0, 1)
-        scharr_magnitude = np.hypot(grad_x_sharr, grad_y_sharr)
 
-        edge_threshold = np.percentile(scharr_magnitude, 80)
-        brightness_threshold = np.percentile(img, 60)
-        # filter seeds
-        selected_seeds2 = []
-        for x, y in seeds:
-            # flat area and bright area
-            if scharr_magnitude[y, x] < edge_threshold and img[y, x] > brightness_threshold:
-                selected_seeds2.append((x, y))
 
-        selected_seeds2 = np.array(selected_seeds2)
+        selectedSeeds = np.argwhere(filtered == 1)[:,::-1]
+
 
         if self.debug:
-            self.showDebug(img,sobel_magnitude,scharr_magnitude,selected_seeds,selected_seeds2,seeds)
+            self.showDebug(img,sobel,edgeMask,edgeMaskDil,selectedSeeds,seeds)
 
-        ctx.set('seeds',selected_seeds)
+        ctx.set('seeds',selectedSeeds)
 
         return ctx
 
-    def showDebug(self,img,sobel_magnitude,scharr_magnitude,selected_seeds,selected_seeds2,seeds):
+    def showDebug(self,img,sobel,edgeMask,edgeMaskDil,selectedSeeds,seeds):
         from matplotlib import pyplot as plt
         plt.figure(figsize=(12, 8))
-        plt.subplot(2, 2, 1)
-        plt.imshow(sobel_magnitude)
-        plt.title(f"sobel img {len(selected_seeds)}/{len(seeds)}")
+        plt.subplot(2, 3, 1)
+        plt.axis("off")
+        plt.imshow(sobel, cmap="gray")
+        plt.subplot(2, 3, 2)
+        plt.imshow(edgeMask,cmap="gray")
+        plt.axis("off")
+        plt.title(f"sobel img {len(selectedSeeds)}/{len(seeds)}")
+        plt.subplot(2, 3, 3)
+        plt.axis("off")
+        plt.imshow(edgeMaskDil,cmap="gray")
 
-        plt.subplot(2, 2, 2)
-        plt.imshow(scharr_magnitude)
-        plt.title(f"scharr img {len(selected_seeds2)}/{len(seeds)}")
 
-        if len(selected_seeds) > 0:
-            plt.subplot(2, 2, 3)
-            plt.imshow(img, cmap="gray")
-            plt.scatter(x=selected_seeds[:, 0], y=selected_seeds[:, 1], c="red")
-        if len(selected_seeds2) > 0:
-            plt.subplot(2, 2, 4)
-            plt.imshow(img, cmap="gray")
-            plt.scatter(x=selected_seeds2[:, 0], y=selected_seeds2[:, 1], c="red")
+        if len(selectedSeeds) > 0:
+            #coloredMask=np.zeros((img.shape[0],img.shape[1],3))
+            coloredImg = cv2.cvtColor(cv2.normalize(img,None,0,255,cv2.NORM_MINMAX,cv2.CV_8U),cv2.COLOR_GRAY2RGB)
+            for x,y in seeds:
+                coloredImg[y,x] = (255,0,0)
+            for x, y in selectedSeeds:
+                coloredImg[y, x] = (0, 255, 0)
+
+            plt.subplot(2, 3, 5)
+            plt.axis("off")
+            plt.imshow(coloredImg, cmap="gray")
+            #plt.scatter(x=selectedSeeds[:, 0], y=selectedSeeds[:, 1], c="red")
+
         plt.show()

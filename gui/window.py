@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
         self.button.clicked.connect(self.openFileDialog)
 
         self.selectAlg = QtWidgets.QComboBox()
-        self.selectAlg.addItems(["select 5 seeds","divergence","divergence Blur", "Manual", "SplitMerge Gmm","Sliding Windows","Enhanced Divergence"])
+        self.selectAlg.addItems(["Select 5 seeds","Divergence","Divergence Blur", "Manual", "SplitMerge Gmm","Sliding Windows","Enhanced Divergence"])
         self.selectAlg.currentIndexChanged.connect(self.onAlgChange)
 
         self.selectType = QtWidgets.QComboBox()
@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
         self.resultType.addItems(["Masks","Contour"])
         self.resultType.currentIndexChanged.connect(self.onResultTypeChange)
 
-        self.evaluateBtn = QPushButton("Kiértékelés")
+        self.evaluateBtn = QPushButton("Evaluate")
         self.evaluateBtn.clicked.connect(self.evaluatePicture)
 
 
@@ -177,43 +177,18 @@ class MainWindow(QMainWindow):
 
 
         #mask = self.logic.executeAlg2(self.image[:,:,self.slice]).astype(np.uint8)
+        #try:
         masks = self.pipeline.run(self.ctx)
-        mask = masks[0]
+        #except Exception as e:
+        #    masks=[np.zeros_like(ctx.data["image"])]
+        #    print("error",e)
+
         masks = np.moveaxis(np.array(masks), 0, -1)
 
         self.resultImagePlaceholder.images = masks
         self.resultImagePlaceholder.originalImage = self.origImagePlaceholder.image
         self.resultImagePlaceholder.displayImage()
 
-        '''if mask is not None:
-            normImg = cv2.normalize(self.image[:, :, self.slice].astype(np.float32), None, 0, 255,
-                                    cv2.NORM_MINMAX).astype(np.uint8)
-            cvImage = cv2.cvtColor(normImg, cv2.COLOR_GRAY2RGB)
-
-            h, w, _ = cvImage.shape
-
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for c in contours:
-                cv2.drawContours(cvImage, [c], -1, (255, 0, 0), thickness=2)
-
-            qim = QImage(cvImage, w, h, cvImage.strides[0], QImage.Format_RGB888)
-            #self.display_image(QPixmap(qim))
-
-        elif len(self.dots)>0:
-            mask = np.zeros((self.image.shape[0] + 2, self.image.shape[1] + 2), dtype=np.uint8)
-            print(mask.shape)
-            print(self.image.shape)
-            resImage = self.image.copy()
-            for dot in self.dots:
-                retval, resImage, mask, rect = cv2.floodFill(self.image[:,:,self.slice], mask, (dot.x(),dot.y()),(255,0,0),(30,30,30),(30,30,30), flags=4 | cv2.FLOODFILL_FIXED_RANGE | cv2.FLOODFILL_MASK_ONLY | (255 << 8))
-
-            print("retval", retval)
-            cv2.imshow("mask", mask)
-
-            print("rect", rect)
-
-        '''
-        return
 
     def loadNifti(self, path):
         img = nib.load(path)

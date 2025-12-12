@@ -51,7 +51,7 @@ class OpenCVRegionGrowing(RegionGrowingStrategy):
                 plt.subplot(2, 3, i + 1)
                 plt.imshow(masks[i], cmap='binary')
                 plt.title(f"Mask seed:({seeds[i][0]},{seeds[i][1]})")
-            cv2.imshow("RESULT", seedImg)
+            #cv2.imshow("RESULT", seedImg)
             plt.show()
 
         return masks

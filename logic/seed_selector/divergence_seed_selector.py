@@ -32,7 +32,10 @@ class DivergenceSeedSelector(SeedSelector):
         hist, bin_edges = self.calcRoiHistogram(region)
 
         ''' 2. Calc Divergence '''
-        P = hist / np.sum(hist)
+        P=hist
+        s = np.sum(hist)
+        if s>0:
+            P = hist / s
 
         div = np.gradient(hist) * P
         '''from matplotlib import pyplot as plt

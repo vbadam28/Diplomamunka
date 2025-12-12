@@ -5,8 +5,10 @@ from logic.preprocessing.preprocessing_step import inverseEnhanceImage
 
 
 class EnhancedSplitMerge:
+    hyperintenseRangeOrig = (0.82, 1.0)  # (0.47, 0.8)
     hyperintenseRange = (0.82, 1.0)  # (0.47, 0.8)
     hypointenseRange = (0.05, 0.14)  # (0.1, 0.25)
+    meanHyperThresOrig =  0.842
     meanHyperThres =  0.842
     meanHypoThres = 0.09
     sumHyperThres = 300
@@ -22,7 +24,7 @@ class EnhancedSplitMerge:
         self.regionFeatures = []
         self.leafs = []
         self.toMerge = []
-
+        self.debug = False
 
     def process(self,ctx):
         self.toMerge = []
@@ -34,10 +36,22 @@ class EnhancedSplitMerge:
             cv2.normalize(inverseEnhanceImage(self.image).astype(np.float32), None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8),
             cv2.COLOR_GRAY2BGR)
 
+        self.meanHyperThres=self.meanHyperThresOrig
+        self.hyperintenseRange=self.hyperintenseRangeOrig
+        doFilter = False
 
+        low,high,avgHyper = self.findHyperRangeAndAvg(image)
+
+        if low is not None and high is not None:
+            self.hyperintenseRange = (low,high)
+            if avgHyper is not None and avgHyper > 0:
+                self.meanHyperThres = avgHyper
+        else:
+            doFilter=True
 
         self.split((0, 0), self.image.shape, self.depth)
-        self.toMerge =  self.filterBlocks()
+        #if doFilter:
+        #    self.toMerge =  self.filterBlocks()
         self.result = self.merge()
 
         if self.debug:
@@ -45,6 +59,84 @@ class EnhancedSplitMerge:
         ctx.set('roi',self.result)
         return ctx
 
+
+    def findHyperRangeAndAvg(self, image):
+        from scipy.signal import find_peaks
+        from scipy.ndimage import gaussian_filter1d
+
+        hist, bin_edges = np.histogram(image[image>0], bins=256, range=(0.0, 1.0))
+        hist_s = gaussian_filter1d(hist, sigma=2)
+        maxIdx = np.argmax(hist_s)
+
+
+        peaks, _  = find_peaks(hist_s, prominence=0.2, width=5, height=0.3)
+        minimas, _  = find_peaks(-hist_s)
+
+        peaks_after = peaks[peaks>maxIdx]
+        localMaxIdx =   peaks_after[np.argmax(hist_s[peaks_after])] if len(peaks_after)>0 else None
+
+        minimas_before = minimas[(minimas>maxIdx) & (minimas< localMaxIdx)] if localMaxIdx is not None else None
+        localMinIdx =   minimas_before[np.argmin(hist_s[minimas_before])] if minimas_before is not None and len(minimas_before)>0 else None
+
+
+        bin_centers = (bin_edges[:-1]+bin_edges[1:])/2
+
+        low  =  None
+        high =  None
+        avgHyper = None
+
+        if localMinIdx is not None and localMaxIdx is not None and localMaxIdx-localMinIdx>4:
+            low = bin_centers[localMinIdx]
+            high = bin_centers[min(len(bin_centers) - 1, (localMaxIdx + (localMaxIdx - localMinIdx)))]
+
+            mask = (bin_edges[:-1] >= low) & (bin_edges[1:] <= high)
+            sum = np.sum(bin_centers[mask] * hist[mask])
+            N = np.sum(hist[mask])
+            avgHyper = 0
+            if N != 0:
+                avgHyper = sum / N
+                avgHyper = (bin_centers[localMinIdx]+ avgHyper)/2 # ne pont az átlag legyen hanem a range alja és az átlag felénél reálisabb
+
+        if self.debug:
+            self.showIntensityRange(hist, hist_s, bin_edges, maxIdx,localMaxIdx,localMinIdx, avgHyper)
+        return low, high, avgHyper
+
+    def showIntensityRange(self,hist, hist_s, bin_edges, maxIdx,localMaxIdx,localMinIdx, avgHyper):
+        from matplotlib import pyplot as plt
+        plt.figure()
+        plt.plot(hist_s)
+        plt.plot(hist, alpha=.5)
+        ticks=np.linspace(0,len(hist)-1,6)
+        labels = np.linspace(0,1,6)
+        plt.xticks(ticks,[f"{v:.2f}" for v in labels])
+        #plt.title(localMaxIdx-localMinIdx)
+
+        plt.scatter(maxIdx,hist_s[maxIdx], color="red")
+        #burnedInMeanIdx = np.where((bin_edges[:-1] <= 0.842) & (0.842 < bin_edges[1:]))[0][0]
+        #plt.scatter(burnedInMeanIdx,hist[burnedInMeanIdx], color="magenta" )
+
+        if localMaxIdx is None or localMinIdx is None:
+            low, high = self.hyperintenseRange
+            mid = low+((high-low)/2)
+            #localMinIdx = np.where((bin_edges[:-1] <= low) & (low < bin_edges[1:]))[0][0]#np.digitize(low, bin_edges)-1
+            #localMaxIdx = np.where((bin_edges[:-1] <= mid) & (mid < bin_edges[1:]))[0][0]#np.digitize(mid, bin_edges)-1
+
+
+        if localMaxIdx is not None:
+            plt.scatter(localMaxIdx,hist_s[localMaxIdx],color="green")
+
+        if localMinIdx is not None:
+            plt.scatter(localMinIdx,hist_s[localMinIdx],color="blue")
+        if avgHyper is not None:
+            avgHyperIdx = np.where((bin_edges[:-1] <= avgHyper) & (avgHyper < bin_edges[1:]))[0][0]
+            plt.scatter(avgHyperIdx,hist_s[avgHyperIdx],color="red")
+
+        #if localMaxIdx is not None and localMinIdx is not None:
+            #plt.hlines(hist_s[localMinIdx],localMinIdx, localMaxIdx+(localMaxIdx-localMinIdx),colors="yellow")
+
+
+        plt.show()
+        return
     def merge(self):
         mask = np.zeros_like(self.image).astype(np.uint8)
         for area in self.toMerge:
@@ -65,10 +157,10 @@ class EnhancedSplitMerge:
             cv2.COLOR_GRAY2BGR)
 
         best, bestScore, rest = self.selectBestArea()
-        print()
+        #print()
 
         sortedList  = sorted(rest, key=self.compareHelper(best, bestScore), reverse=True)
-        print()
+        #print()
         return self.chooseBlocks(best,bestScore, sortedList)
 
 
@@ -93,8 +185,8 @@ class EnhancedSplitMerge:
             #ez nem feltétlenül jó hisz volt már egy max intenzitás, ami legfeljebb nőni tud
             #a legkisebb max intenzitást érdemes nézni?
             mergedScore = self.score(None, mergedRegionTest)[0]
-            print(mergedScore)
-            print()
+            #print(mergedScore)
+            #print()
             if mergedScore>0.4:
                 mergedRegion = mergedRegionTest.copy()
                 t.append(area)
@@ -147,7 +239,7 @@ class EnhancedSplitMerge:
 
             mergedScore = self.score(None,mergedRegion)[0]
             mergedMaskCompactness = self.compactness(mergedMask)[0]
-            print(f"DISTANCE {distanceScore}, d_i: {d_i},\t  tau: {tau},    updatedScore: {score * distanceScore}  oldScore: {score}, mergedRegionSCore: {mergedScore}, combinedScore: {mergedScore * distanceScore}  mergedMaskCompactness: {mergedMaskCompactness}")
+            #print(f"DISTANCE {distanceScore}, d_i: {d_i},\t  tau: {tau},    updatedScore: {score * distanceScore}  oldScore: {score}, mergedRegionSCore: {mergedScore}, combinedScore: {mergedScore * distanceScore}  mergedMaskCompactness: {mergedMaskCompactness}")
 
 
             return d_i, score * distanceScore
@@ -384,7 +476,7 @@ class EnhancedSplitMerge:
             #plt.imshow(edges)
             plt.show(block = True)
         '''
-        print(f"rMax {rMax}, rMean {rMean}, rStd {np.std(region2[mask==255])}, rP95Int {rP95Int},  ENTROPY {entropy}, thresh {thresh}, compactness {'%.2f'%compactness}, SCORE {score}")
+        #(f"rMax {rMax}, rMean {rMean}, rStd {np.std(region2[mask==255])}, rP95Int {rP95Int},  ENTROPY {entropy}, thresh {thresh}, compactness {'%.2f'%compactness}, SCORE {score}")
 
 
 
@@ -411,15 +503,15 @@ class EnhancedSplitMerge:
     def loadParams(self,ctx):
         self.depth = ctx.params.get("qt:depth",self.depth)
 
-        hyperMin= ctx.params.get("qt:hyperMin",self.hyperintenseRange[0])
-        hyperMax = ctx.params.get("qt:hyperMax",self.hyperintenseRange[1])
-        self.hyperintenseRange = (hyperMin,hyperMax)
+        hyperMin= ctx.params.get("qt:hyperMin",self.hyperintenseRangeOrig[0])
+        hyperMax = ctx.params.get("qt:hyperMax",self.hyperintenseRangeOrig[1])
+        self.hyperintenseRangeOrig = (hyperMin,hyperMax)
 
         hypoMin = ctx.params.get("qt:hypoMin",self.hypointenseRange[0])
         hypoMax = ctx.params.get("qt:hypoMax",self.hypointenseRange[1])
         self.hypointenseRange = (hypoMin,hypoMax)
 
-        self.meanHyperThres = ctx.params.get("qt:meanHyperTresh",self.meanHyperThres)
+        self.meanHyperThresOrig = ctx.params.get("qt:meanHyperTresh",self.meanHyperThresOrig)
         self.meanHypoThres = ctx.params.get("qt:meanHypoTresh", self.meanHypoThres)
 
         self.sumHyperThres = ctx.params.get("qt:sumHyperThresh", self.sumHyperThres)

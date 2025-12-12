@@ -1,10 +1,12 @@
 from collections import namedtuple
 import numpy as np
-from scipy.ndimage import maximum_filter
+from PySide6.QtCore import QEventLoop
+from scipy.ndimage import maximum_filter, gaussian_laplace
+from skimage.feature.blob import blob_log
 
 Window = namedtuple("Window", ["x", "y", "w", "h", "score"])
 class SlidingWindow:
-    def __init__(self,windowSize=(8,8), step=4, overlapping=True, iou=0.5,kTop=5, mode='std'):
+    def __init__(self,windowSize=(8,8), step=4, overlapping=True, iou=0.5,kTop=5, mode='mean'):
         self.debug = True
         self.windowSize = windowSize
         self.step = step
@@ -36,25 +38,36 @@ class SlidingWindow:
         elif mode=="max":
             score = np.max(window)
         elif mode=="std":
-            score = np.std(window)
+            #score = np.std(window)
 
-            globalMean = np.mean(image[image>0])
+            globalMean = self.globalMean
             values = window[window>0]
             score = 0.0
             if values.size != 0:
-                score = np.sqrt(np.mean((values-globalMean)**2))
+                score = -np.std(values) * (1 - np.mean(values))
+                #core = np.sqrt(np.mean((values-globalMean)**2)) #ugyanaz a tendencia mint átlag,
+                score = -np.std(values) * (1-np.mean(values))  #tumorok széle fele húz
+                #kis std jobb(homogénebb) -> *-1 (akkor azok lesznek a legnagyobbak)
+                #sötét terület is lehet homogén -> súlyozzuk az ablak átlagintenzitásával -> mivel negatív std-t nézek ->1-átlag
+
+
         elif mode=="blob":
-            #from scipy.ndimage import gaussian_laplace,gaussian_filter
             score = 0.0
-            vals = image[image>0]
-            if len(window[window>0])>0:
-                score = np.abs(window[window>0].mean() - vals.mean()) / (vals.std() + 1e-6)
+            values = window[window>0]
+            if values.size!=0:
+                LoG = gaussian_laplace(values,1.4) #2.derivált(dupla éldetektálás), fehérbe lép be -> külső él pozítív belső negatív, nincs változás területen 0.
+                score= -(LoG.mean()) * (np.mean(values))
+                #score=0.0
+                #blobs = blob_log(window,max_sigma=30,threshold=0.1)
+                #if blobs.size!=0:
+                #    score = np.max(blobs[:,2]) * np.sqrt(2) * np.mean(values)
+
         elif mode=="entropy":
             #from skimage.measure import shannon_entropy
             #score = shannon_entropy(window)
             score = 0.0
 
-            globalHist  =self.computeNormHist(image)
+            globalHist  = self.globalHist#self.computeNormHist(image)
             localHist = self.computeNormHist(window)
 
             mask = (localHist>0) & (globalHist >0)
@@ -62,7 +75,16 @@ class SlidingWindow:
             #summa P * log(P/Q) ahol P a window a Q az image
             score = np.sum(localHist[mask] * np.log(localHist[mask] / globalHist[mask]))
 
+            score = 0.0
 
+            vals = window.flatten()
+            hist, _ = np.histogram(vals, bins=64, range=(0,1))
+            hist = hist + 1e-6
+            p = hist / hist.sum()
+
+            H = -np.sum(p * np.log2(p))
+            H_norm = H / np.log2(8)
+            score = H_norm
 
 
         elif mode=="all":
@@ -96,7 +118,7 @@ class SlidingWindow:
         return inter/union if union>0 else 0
 
 
-    def nonMaxSupression(self,windows, iou_threshold=0.5):
+    def nonMaxSupressionSlow(self,windows, iou_threshold=0.5):
         windows =  sorted(windows, key=lambda w: w.score, reverse=True)
         kept=[]
         while windows:
@@ -105,18 +127,22 @@ class SlidingWindow:
             windows = [w for w in windows if self.iou(best,w) < iou_threshold]
 
         return kept
-    def nonMaxSupression2(self,scoreMap,size=3, th=0):
+    def nonMaxSupression(self,scoreMap,size=3, th=0):
         localMax = maximum_filter(scoreMap,size=size) == scoreMap
         maxima = np.argwhere(localMax & (scoreMap>th))
         return maxima
 
-
-
+    def preComputeVarsForScore(self,image):
+        self.globalHist = self.computeNormHist(image)
+        self.vals = image[image>0]
+        self.globalMean=np.mean(image[image>0])
     def process(self, ctx):
 
         image = ctx.get('image')
         self.debug=ctx.get('debug')
         self.loadParams(ctx)
+
+        self.preComputeVarsForScore(image)
 
         windows = []
         scoreMap=np.zeros((image.shape[0],image.shape[1]), dtype=float)
@@ -126,35 +152,43 @@ class SlidingWindow:
             windows.append(Window(x,y,window.shape[1],window.shape[0], score))
             scoreMap[y+window.shape[0]//2,x + window.shape[1]//2] = score
 
+        if np.min(scoreMap)<0.0:
+            print(np.min(scoreMap))
+            mask = ~np.isclose(scoreMap,0.0)
+            scoreMap[mask]+=np.abs(np.min(scoreMap))
 
-        selected = []#self.nonMaxSupression(windows,self.iouThres)
-        #selected = sorted(selected, key=lambda w: w.score, reverse=True)[:self.kTop]
 
-        #ctx.set('windows',selected)
-
-        maxima = self.nonMaxSupression2(scoreMap)
+        maxima = self.nonMaxSupression(scoreMap)
         h,w = self.windowSize
         candidates = [(x,y,scoreMap[y,x]) for y,x in maxima]
         candidates.sort(key=lambda c: c[2], reverse=True)
 
-        selected2 = []
+        selected = []
         for cx,cy, score in candidates:
             #if all(abs(cx - win.x+w//2) >= w // 2 or abs(cy-win.y+h//2) >= h//2 for win in selected2):
-            selected2.append((Window(cx-w//2,cy-h//2,w,h,score)))
-            if len(selected2) >= self.kTop:
+            selected.append((Window(cx-w//2,cy-h//2,w,h,score)))
+            if len(selected) >= self.kTop:
                 break
-        ctx.set('windows', selected2)
+        ctx.set('windows', selected)
 
         if self.debug:
-            self.showDebug(scoreMap,image,selected, selected2)
+            self.showDebug(scoreMap,image,selected)
         return ctx
 
 
-    def showDebug(self, scoreMap,image,selected, selected2):
+    def showDebug(self, scoreMap,image,selected):
         from matplotlib import pyplot as plt
         plt.figure(figsize=(12, 8))
-        plt.subplot(1, 3, 1)
-        plt.title("scoreMap")
+        plt.subplot(1, 2, 1)
+        title = "Átlag"
+        if self.mode=="max":
+            title = "Maximum"
+        elif self.mode == "std":
+            title = "Szórás"
+        elif self.mode == "blob":
+            title = "LoG"
+        plt.title(title)#"scoreMap")
+        plt.axis("off")
         plt.imshow(scoreMap, cmap="gray")
 
         import cv2
@@ -168,18 +202,11 @@ class SlidingWindow:
             cv2.circle(i, center=(w.x + np.round(w.w / 2).astype(np.int32), w.y + np.round(w.h / 2).astype(np.int32)),
                        radius=4, color=(255, 0, 0))
             cv2.rectangle(i,(w.x,w.y),(w.x+w.w,w.y+w.h),(0,0,255))
-        for w in selected2:
-            i2[w.y + w.h // 2, w.x + w.w // 2] = (255, 0, 0)
-            cv2.circle(i2, center=(w.x + np.round(w.w / 2).astype(np.int32), w.y + np.round(w.h / 2).astype(np.int32)),
-                       radius=4, color=(255, 0, 0))
-            cv2.rectangle(i2,(w.x,w.y),(w.x+w.w,w.y+w.h),(0,0,255))
 
-        plt.subplot(1, 3, 2)
+
+        plt.subplot(1, 2, 2)
         plt.title('image')
         plt.imshow(i)
-        plt.subplot(1, 3, 3)
-        plt.title('image2')
-        plt.imshow(i2)
         plt.show()
         print(scoreMap.max(), scoreMap[scoreMap > 0].min(), scoreMap[scoreMap > 0].mean())
 

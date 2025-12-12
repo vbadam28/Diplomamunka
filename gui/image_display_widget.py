@@ -58,7 +58,7 @@ class ImageDisplayWidget(QWidget):
 
     @property
     def image(self):
-        return cv2.resize(self._images[:,:,self.slice],(256,256))
+        return cv2.resize(self._images[:,:,self.slice],(240,240)) #pl brain 219 slice 102 nél 256x256 os resize nál jobb eredményeket ad az sw:std-max
 
     @property
     def seeds(self):
@@ -82,7 +82,7 @@ class ImageDisplayWidget(QWidget):
     def displayImage(self):
         if self.images is None or len(self.images)==0:
             return
-        normImg = cv2.normalize(cv2.resize(self.images[:,:,self.slice].astype(np.float32),(256,256)), None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        normImg = cv2.normalize(cv2.resize(self.images[:,:,self.slice].astype(np.float32),(240,240)), None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         cvImage = cv2.cvtColor(normImg, cv2.COLOR_GRAY2RGB)
 
         h,w,_ = cvImage.shape
