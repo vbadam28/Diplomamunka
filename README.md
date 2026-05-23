@@ -5,13 +5,14 @@
 ### Python verzió
 - Python 3.10.2
 
-### Felhasznált csomagok
+### Felhasznált külső csomagok
 - PySide6: 6.9.0
 - numpy: 2.2.6
 - opencv: 4.12.0
 - matplotlib: 3.10.6
 - nibabel: 5.3.2
 - scipy: 1.15.3
+- seaborn: 0.3.12
 - pandas: 2.3.3 (eredmények értelmezésénél)
 - tqdm: 4.66.2 (kiértékelésnél)
 
