@@ -1,12 +1,15 @@
 import cv2
 import numpy as np
+from scipy.signal import find_peaks
 
 from logic.preprocessing.preprocessing_step import enhanceImage
 from logic.seed_selector.seed_selector import SeedSelector
 
 class DivergenceSeedSelector(SeedSelector):
-    def __init__(self):
+    def __init__(self, enhanced=False):
         self.debug=False
+        self.ctx={}
+        self.enhanced = enhanced
 
     def calcRoiHistogram(self,region):
         hist, bin_edges = np.histogram(region, bins=256, range=(0.0, 1.0))
@@ -19,25 +22,131 @@ class DivergenceSeedSelector(SeedSelector):
         tail = div[idx + 1:]
 
         nearest_zero = np.argmin(np.abs(tail))
+        #if nearest_zero == len(tail)-1 and len(tail)>0:
+        #    nearest_zero = np.argmin(np.abs(tail[:-1]))
+
+
         optimal_threshold_idx = nearest_zero + 1 + idx
         optimal_threshold = bin_edges[optimal_threshold_idx]
 
         return idx,tail,nearest_zero, optimal_threshold_idx,optimal_threshold
+    def setOptimalThresholdEnhanced(self,div,bin_edges):
+
+        img_hist, img_bin_edges = np.histogram(self.ctx.get("image"), bins=256, range=(0.0, 1.0))
+        img_hist[0] = 0
+        globalMaxIdxImg =np.argmax(img_hist)
+
+
+        peaks, props = find_peaks(div, prominence=0.1 * np.max(div))
+        #candidatePeaks = peaks[peaks>globalMaxIdxImg-10]
+        #choosenPeak = candidatePeaks[np.argmin(np.abs(candidatePeaks-globalMaxIdxImg))]
+
+
+        score = (0.7*np.abs(peaks-globalMaxIdxImg)/len(div)) +  0.3* (1 - (div[peaks]/np.max(div)))
+        score[score<=0]=np.inf
+        choosenPeak = peaks[np.argmin(score)]
+
+
+        #score = (np.abs(peaks-globalMaxIdxImg) / len(div) - 0.3 * props["prominences"] / np.max(props["prominences"]))
+        #choosenPeak = peaks[np.argmin(score)]
+
+        idx = choosenPeak
+        tail = div[idx + 1:]
+
+        nearest_zero = np.argmin(np.abs(tail))
+
+        '''eps = 1e-3
+        for i in range(len(tail)):
+            if abs(tail[i])< eps:
+                nearest_zero = i
+                break
+        '''
+        eps = 0.03 * np.max(div)
+        window=3
+        for i in range(len(tail) - window):
+            if np.mean(abs(tail[i:i+window])) < eps:
+                nearest_zero = i
+                break
+
+
+        '''window = 7
+        eps_mean = 0.03 * np.max(div)
+        eps_std = 0.02 * np.max(div)
+
+        for i in range(len(tail)- window):
+            seg = tail[i:i+window]
+            if np.mean(np.abs(seg)) < eps_mean and np.std(seg) < eps_std:
+                nearest_zero = i
+                break
+
+        for i in range(len(tail)-window):
+            if np.std(tail[i:i+window])<eps_std:
+                nearest_zero = i
+                break
+        '''
+
+        optimal_threshold_idx = nearest_zero + 1 + idx
+        optimal_threshold = bin_edges[optimal_threshold_idx]
+
+        return idx,tail,nearest_zero, optimal_threshold_idx,optimal_threshold, choosenPeak
+
+    def setOptimalThresholdEnhanced2(self,div,bin_edges):
+
+
+        peaks, props = find_peaks(div, prominence=0.1 * np.max(div))
+
+        maxVal = np.max(div)
+        candidates = peaks[div[peaks] > 0.7 * maxVal]
+        choosenPeak = np.min(candidates)
+
+
+
+        idx = choosenPeak
+        tail = div[idx + 1:]
+
+        nearest_zero = np.argmin(np.abs(tail))
+
+        eps = 1e-3
+        for i in range(len(tail)):
+            if abs(tail[i])< eps:
+                nearest_zero = i
+                break
+
+
+        optimal_threshold_idx = nearest_zero + 1 + idx
+        optimal_threshold = bin_edges[optimal_threshold_idx]
+
+        return idx,tail,nearest_zero, optimal_threshold_idx,optimal_threshold
+
+
     def select(self,ctx):
+        from scipy.ndimage import gaussian_filter1d
+        from scipy.signal import savgol_filter
         self.debug=ctx.get('debug',False)
+        self.ctx = ctx
         region = ctx.get('roi',ctx.get('image'))
         image = enhanceImage(ctx.get('image'))
         ctx.set('image',image)
         ''' 1. Calc Histogram '''
         hist, bin_edges = self.calcRoiHistogram(region)
 
+        #peaks,_ = find_peaks(hist, prominence=0.05 * np.max(hist))
+        #peakDensity = len(peaks)/len(hist)
+        #if peakDensity>0.05:
+        if self.enhanced:
+            hist = gaussian_filter1d(hist, sigma=1.1)
+            #win = max(7, int(0.05 * len(hist)) | 1)
+            #hist = savgol_filter(hist, win, polyorder=2)
+
         ''' 2. Calc Divergence '''
+
         P=hist
         s = np.sum(hist)
         if s>0:
             P = hist / s
 
         div = np.gradient(hist) * P
+
         '''from matplotlib import pyplot as plt
         plt.figure()
 
@@ -63,9 +172,21 @@ class DivergenceSeedSelector(SeedSelector):
         plt.show()
         '''
 
-
+        idx, tail, nearest_zero, optimal_threshold_idx, optimal_threshold = 0, 0, 0, 0, 0
         ''' 3. Set optimal threshold'''
-        idx,tail, nearest_zero, optimal_threshold_idx,optimal_threshold = self.setOptimalThreshold(div,bin_edges)
+        if self.enhanced:
+            idx,tail, nearest_zero, optimal_threshold_idx,optimal_threshold, choosenMaxPeak = self.setOptimalThresholdEnhanced(div,bin_edges)
+
+            if optimal_threshold_idx >= len(div)-20 and optimal_threshold_idx-choosenMaxPeak<= 20:
+                div[choosenMaxPeak:]= -div[choosenMaxPeak]
+                #div[optimal_threshold_idx] = div[choosenMaxPeak]
+                idx, tail, nearest_zero, optimal_threshold_idx, optimal_threshold,_ = self.setOptimalThresholdEnhanced(div, bin_edges)
+            elif optimal_threshold_idx >= len(div)-20:
+                div[-20:] = -div[choosenMaxPeak]
+                idx, tail, nearest_zero, optimal_threshold_idx, optimal_threshold,_ = self.setOptimalThresholdEnhanced(div, bin_edges)
+
+        else:
+            idx,tail, nearest_zero, optimal_threshold_idx,optimal_threshold = self.setOptimalThreshold(div,bin_edges)
 
         if self.debug:
             self.showOptThreshold(hist,bin_edges,div,idx,optimal_threshold_idx)
@@ -96,7 +217,7 @@ class DivergenceSeedSelector(SeedSelector):
         plt.scatter(idx, div[idx], c="green")
         plt.scatter(optimal_threshold_idx, div[optimal_threshold_idx], c="red")
 
-        plt.title(f"Divergence, Thres: ({bin_edges[optimal_threshold_idx]},{div[optimal_threshold_idx]})")
+        plt.title(f"Divergence, Thres: ({bin_edges[optimal_threshold_idx]},{div[optimal_threshold_idx]:.4f})")
 
         plt.show()
     def showSeeds(self, image, region,mask):

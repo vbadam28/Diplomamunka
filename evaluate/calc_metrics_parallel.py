@@ -7,7 +7,7 @@ import os
 import nibabel as nib
 import numpy as np
 
-from evaluate.calc_metrics import score
+from calc_metrics import score
 from logic.pipeline.pipelineContext import PipelineContext
 import time
 
@@ -17,7 +17,7 @@ def loadNiftiCached(path):
         _globalCache[path]= nib.load(path)
     return _globalCache[path]
 
-def runAll(pipelines,processTask=None, basePath="../content/dataset",n_jobs=None, chunksize=4):
+def runAll(pipelines,processTask=None, basePath="../../content/dataset",n_jobs=None, chunksize=4):
     if n_jobs is None:
         n_jobs = max(1,multiprocessing.cpu_count()-1)
 

@@ -12,7 +12,8 @@ def showHeatmap(groupPS, values=("DS_mean","Dice átlag"),index=("params","Param
     heatmapDf = groupPS.pivot(index=index[0], columns=columns[0], values=values[0])
 
     plt.figure(figsize=(8, 5))
-    sns.heatmap(heatmapDf, annot=True, fmt=".2f", cmap="viridis", linewidths=0.5)
+    ax=sns.heatmap(heatmapDf, annot=True, fmt=".3f", cmap="viridis", linewidths=0.5)
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
     plt.title(values[1])
     plt.xlabel(columns[1])
     plt.ylabel(index[1])
@@ -21,7 +22,25 @@ def showHeatmap(groupPS, values=("DS_mean","Dice átlag"),index=("params","Param
 
 
 
+def showBars(plotDf,n=2,title="DS, FPR, FNR, Sn, Sp paraméterezés szerint", xLabel="Paraméterezés",yLabel="Érték"):
+    plt.figure(figsize=(10, 5))
+    ax = sns.barplot(plotDf, x="params", y="Value", hue="Metric", errorbar="sd")
+    plt.title(title)
+    plt.ylabel(yLabel)
+    plt.xlabel(xLabel)
+    plt.legend(title="Metrika")
+    plt.tight_layout()
 
+    for p in ax.patches:
+        if p.get_height() > 0.0:
+            ax.annotate(f"{p.get_height():.{n}f}",
+                        (p.get_x() + p.get_width() / 2., p.get_height()),
+                        ha="center", va="center",
+                        fontsize=10, color="black",
+                        xytext=(0, 5), textcoords="offset points"
+                        )
+
+    plt.show()
 
 
 
@@ -95,7 +114,7 @@ def makeBins(df,cols,res):
         print(f"{col} bins:", areaBins)
         df[res[i]] = pd.cut(
             df[col],
-            bins=areaBins,  # [0,100,500,2000,np.inf],
+            bins=areaBins,  # [9, 537, 1310.5, 2298, 3264.3, 6444],
             labels=["tiny", "small", "medium", "large", "huge"],
         )
     return df
@@ -145,6 +164,96 @@ def calc(path,brainStatsPath=None):
 
 
 
+def runSaad():
+    df, grouped, groupPS, dfVol, dfError = calc("csv/enhanced_div_parallel_all_slices.csv", "csv/all_slices_stats.csv")
+    dfVolGrouped = groupByDataFrame(dfVol, by=["params", "lesionSize"], metrics=["DS", "EF", "OF", "Sp", "Sn"],
+                                    aggFuncs=["mean", "median"])
+
+
+    dfSaad, groupedSaad, groupPSSaad, dfVolSaad, dfErrorSaad = calc("csv/saad_parallel_all_slices.csv", "csv/all_slices_stats.csv")
+    dfVolSaadGrouped = groupByDataFrame(dfVolSaad, by=["params", "lesionSize"],
+                                          metrics=["DS", "EF", "OF", "Sp", "Sn", "FPR", "FNR"],
+                                          aggFuncs=["mean", "median"])
+
+    # df, grouped, groupPS, dfVol = calc("csv/saad_parallel_all_slices.csv")
+
+    dfVolGrouped = groupByDataFrame(dfVol, by=["params", "lesionSize"],
+                                    metrics=["DS", "EF", "OF", "Sp", "Sn", "FPR", "FNR"], aggFuncs=["mean", "median"])
+
+    groupPS["params"] = "enhanced"
+    groupPSSaad["params"] = "saad"
+
+    df["params"] = "enhanced"
+    dfSaad["params"] = "saad"
+
+
+
+    groupCombined = pd.concat([groupPS,groupPSSaad]).reset_index(drop=True)
+
+
+
+
+
+    combined = pd.concat([df, dfSaad], ignore_index=True)
+
+    # dft, groupedt, groupPSt, dfVolt, _ = calc("csv/test_slices.csv", "csv/all_slices_stats.csv")
+
+    #combined = pd.concat([dft[dft["params"]=="saad"], dft[dft["params"]=="biratu"]],ignore_index=True)
+
+
+    allSlicesDS = groupByDataFrame(combined, by=["params"], metrics=["DS", "FPR", "FNR", "EF", "OF", "Sn", "Sp", "MAPE","MA","Rerr"],
+                                   aggFuncs=["mean", "median"]).reset_index(drop=True)
+
+    saad = combined[combined["params"] == "saad"][["brain ID", "slice ID", "DS", "lesionSize"]].rename(
+        columns={"DS": "DS_saad"})
+    enhanced = combined[combined["params"] == "enhanced"][["brain ID", "slice ID", "DS", "lesionSize"]].rename(
+        columns={"DS": "DS_enhanced"})
+    dfDiffs = (
+        saad
+            .merge(enhanced, on=["brain ID", "slice ID"], how="left")
+    )
+
+    dfDiffs["diff"] = dfDiffs["DS_saad"] - dfDiffs["DS_enhanced"]
+    #dfDiffs.to_csv("csv/saad_enhanced_diff.csv", sep=";")
+
+    #print(dfDiffs[dfDiffs['diff'].isna()].info())
+    #print(dfDiffs[dfDiffs['diff'].isna()].shape)
+    with pd.option_context("display.max_columns",None):#, "display.max_rows", None):
+        #print(dfDiffs[(dfDiffs["diff_swmean"]>0) & (dfDiffs["DS_sw_mean"]>0) & (dfDiffs["DS_biratu"]>0) & (dfDiffs["lesionSize"]!="tiny") & (dfDiffs["lesionSize"]!="small")].sort_values("diff_swmean",ascending=False))
+        #print(dfDiffs[dfDiffs['diff'].isna()  ])
+        print(dfDiffs[(dfDiffs["diff"]>0) & (dfDiffs["DS_saad"]>0) & (dfDiffs["DS_enhanced"]>0)].sort_values("diff",ascending=False).head(20))
+
+    showHeatmap(groupCombined)
+    showHeatmap(groupCombined, values=("DS_median", "Dice medián"))
+
+    showHeatmap(groupCombined, values=("FPR_mean", "FPR átlag"))
+    showHeatmap(groupCombined, values=("FPR_median", "FPR medián"))
+    showHeatmap(groupCombined, values=("FNR_mean", "FNR átlag"))
+    showHeatmap(groupCombined, values=("FNR_median", "FNR medián"))
+
+    showHeatmap(groupCombined, values=("EF_mean", "EF átlag"))
+    showHeatmap(groupCombined, values=("EF_median", "EF medián"))
+    showHeatmap(groupCombined, values=("OF_mean", "OF átlag"))
+    showHeatmap(groupCombined, values=("Sn_mean", "Sensitivity átlag"))
+    showHeatmap(groupCombined, values=("Sp_mean", "Specificity átlag"))
+
+    plotDf = allSlicesDS.melt(id_vars=["params"], value_vars=["DS_mean", "FPR_mean", "FNR_mean", "Sn_mean", "Sp_mean"],
+                              var_name="Metric", value_name="Value")
+
+    showBars(plotDf,n=3, title="DS, FPR, FNR, Sn, Sp módszerek szerint")
+
+    plotDf = allSlicesDS.melt(id_vars=["params"], value_vars=["DS_median", "FPR_median", "FNR_median", "Sn_median", "Sp_median"],
+                              var_name="Metric", value_name="Value")
+    showBars(plotDf, n=3, title="DS, FPR, FNR, Sn, Sp módszerek szerint")
+
+    plotDf = allSlicesDS.melt(id_vars=["params"], value_vars=["DS_median","DS_mean", "FPR_median","FPR_mean", "FNR_median","FNR_mean", "Sn_median","Sn_mean", "Sp_median","Sp_mean"],
+                              var_name="Metric", value_name="Value")
+    showBars(plotDf, n=3, title="DS, FPR, FNR, Sn, Sp módszerek szerint")
+
+    plotDf = allSlicesDS.melt(id_vars=["params"], value_vars=["MAPE_mean","MA_mean","Rerr_mean"],
+                              var_name="Metric", value_name="Value")
+    showBars(plotDf,n=3, title="MAPE, MA ,Rerr  módszerek szerint")
+    return
 
 def runBiratu():
     df, grouped, groupPS, dfVol, _ = calc("csv/sw_all_slices.csv", "csv/all_slices_stats.csv")
@@ -164,7 +273,7 @@ def runBiratu():
     dfVolGrouped = groupByDataFrame(dfVol, by=["params", "lesionSize"],
                                     metrics=["DS", "EF", "OF", "Sp", "Sn", "FPR", "FNR"], aggFuncs=["mean", "median"])
 
-    sel = groupPS[groupPS["params"].isin(["blob-center", "mean-center"])]
+    sel = groupPS[groupPS["params"].isin(["blob-center", "mean-center","max-center"])]
 
     groupPSBiratu["params"] = "biratu"
     groupCombined = pd.concat([sel, groupPSBiratu], ignore_index=True)
@@ -178,7 +287,7 @@ def runBiratu():
     groupCombined = groupCombined.sort_values("params").reset_index(drop=True)
     dfBiratu["params"] = "biratu"
     # ["max-center","std-center","blob-center","mean-center"]
-    combined = pd.concat([df[df["params"].isin(["std-center", "blob-center", "mean-center"])], dfBiratu],
+    combined = pd.concat([df[df["params"].isin(["max-center", "blob-center", "mean-center"])], dfBiratu],
                          ignore_index=True)
     allSlicesDS = groupByDataFrame(combined, by=["params"], metrics=["DS", "FPR", "FNR", "EF", "OF", "Sn", "Sp"],
                                    aggFuncs=["mean", "median"]).reset_index(drop=True)
@@ -199,16 +308,41 @@ def runBiratu():
 
     dfDiffs["diff_swmean"] = dfDiffs["DS_biratu"] - dfDiffs["DS_sw_mean"]
     dfDiffs["diff_swblob"] = dfDiffs["DS_biratu"] - dfDiffs["DS_sw_blob"]
-    dfDiffs["diff_sw"] = dfDiffs["DS_sw_mean"] - dfDiffs["DS_sw_blob"]
     #dfDiffs.to_csv("csv/biratu_sw_diff.csv",sep=";")
 
     with pd.option_context("display.max_columns", None):#, "display.max_rows", None):
-        print(dfDiffs[(dfDiffs["diff_swmean"]>0) & (dfDiffs["DS_sw_mean"]>0) & (dfDiffs["DS_biratu"]>0) & (dfDiffs["lesionSize"]!="tiny") & (dfDiffs["lesionSize"]!="small")].sort_values("diff_swmean",ascending=False))
+        print(dfDiffs[(dfDiffs["diff_swmean"]<0) & (dfDiffs["DS_sw_mean"]>0) & (dfDiffs["DS_biratu"]>0) & (dfDiffs["lesionSize"]!="tiny") & (dfDiffs["lesionSize"]!="small")].sort_values("diff_swmean",ascending=True))
 
+    groupPS = pd.concat([groupPS,groupPSBiratu])
     showHeatmap(groupPS)
+    showHeatmap(groupPS, values=("DS_median", "DS medián"))
     showHeatmap(groupPS, values=("FPR_mean", "FPR átlag"))
+    showHeatmap(groupPS, values=("FPR_median", "FPR medián"))
     showHeatmap(groupPS, values=("FNR_mean", "FNR átlag"))
+    showHeatmap(groupPS, values=("FNR_median", "FNR medián"))
+    showHeatmap(groupPS, values=("Sp_mean", "Sp átlag"))
+    showHeatmap(groupPS, values=("Sp_median", "Sp medián"))
+    showHeatmap(groupPS, values=("Sn_mean", "Sn átlag"))
+    showHeatmap(groupPS, values=("Sn_median", "Sn medián"))
+    showHeatmap(groupPS, values=("EF_mean", "EF átlag"))
+    showHeatmap(groupPS, values=("EF_median", "EF medián"))
+    showHeatmap(groupPS, values=("OF_mean", "OF átlag"))
+    showHeatmap(groupPS, values=("OF_median", "OF medián"))
 
+    showHeatmap(groupCombined)
+    showHeatmap(groupCombined, values=("DS_median", "DS medián"))
+    showHeatmap(groupCombined, values=("FPR_mean", "FPR átlag"))
+    showHeatmap(groupCombined, values=("FPR_median", "FPR medián"))
+    showHeatmap(groupCombined, values=("FNR_mean", "FNR átlag"))
+    showHeatmap(groupCombined, values=("FNR_median", "FNR medián"))
+    showHeatmap(groupCombined, values=("Sp_mean", "Sp átlag"))
+    showHeatmap(groupCombined, values=("Sp_median", "Sp medián"))
+    showHeatmap(groupCombined, values=("Sn_mean", "Sn átlag"))
+    showHeatmap(groupCombined, values=("Sn_median", "Sn medián"))
+    showHeatmap(groupCombined, values=("EF_mean", "EF átlag"))
+    showHeatmap(groupCombined, values=("EF_median", "EF medián"))
+    showHeatmap(groupCombined, values=("OF_mean", "OF átlag"))
+    showHeatmap(groupCombined, values=("OF_median", "OF medián"))
     # showHeatmap(groupPS, values=("DS_median", "Dice medián"),columns=("brainSize","Agy(egészséges) méret kategória"))
 
     # showHeatmap(groupPS, values=("FPR_mean", "FPR átlag"), columns=("brainSize","Agy(egészséges) méret kategória"))
@@ -224,22 +358,11 @@ def runBiratu():
 
     plotDf = allSlicesDS.melt(id_vars=["params"], value_vars=["DS_mean", "FPR_mean", "FNR_mean", "Sn_mean", "Sp_mean"],
                               var_name="Metric", value_name="Value")
+    showBars(plotDf)
+    plotDf = allSlicesDS.melt(id_vars=["params"], value_vars=["DS_median", "FPR_median", "FNR_median", "Sn_median", "Sp_median"],
+                              var_name="Metric", value_name="Value")
+    showBars(plotDf)
 
-    plt.figure(figsize=(10, 5))
-    ax = sns.barplot(plotDf, x="params", y="Value", hue="Metric", errorbar="sd")
-    plt.title("DS, FPR, FNR, Sn, Sp paraméterezés szerint")
-    plt.ylabel("Érték")
-    plt.xlabel("Paraméterezés")
-    plt.legend(title="Metrika")
-    plt.tight_layout()
-
-    for p in ax.patches:
-        if p.get_height() > 0.0:
-            ax.annotate(f"{p.get_height():.2f}",
-                        (p.get_x() + p.get_width() / 2., p.get_height()),
-                        ha="center", va="center",
-                        fontsize=10, color="black",
-                        xytext=(0, 5), textcoords="offset points"
-                        )
-
-    plt.show()
+    plotDf = allSlicesDS.melt(id_vars=["params"], value_vars=["DS_median","DS_mean", "FPR_median","FPR_mean", "FNR_median","FNR_mean", "Sn_median","Sn_mean", "Sp_median","Sp_mean"],
+                              var_name="Metric", value_name="Value")
+    showBars(plotDf)

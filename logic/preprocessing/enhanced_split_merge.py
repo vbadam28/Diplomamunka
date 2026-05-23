@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+from scipy.signal import find_peaks
+from scipy.ndimage import gaussian_filter1d
 
 from logic.preprocessing.preprocessing_step import inverseEnhanceImage
 
@@ -50,8 +52,11 @@ class EnhancedSplitMerge:
             doFilter=True
 
         self.split((0, 0), self.image.shape, self.depth)
-        #if doFilter:
+        #if doFilter and len(self.toMerge)>16:
         #    self.toMerge =  self.filterBlocks()
+        if len(self.toMerge)>1:
+            self.toMerge = self.filterDisconnectedROIs()
+
         self.result = self.merge()
 
         if self.debug:
@@ -59,24 +64,46 @@ class EnhancedSplitMerge:
         ctx.set('roi',self.result)
         return ctx
 
+    def filterDisconnectedROIs(self):
+        gridSize = np.uint8(2**self.depth)
+        qH, qW = np.array(self.image.shape[0:2]) // gridSize
+
+        ROImap = np.zeros((gridSize,gridSize),dtype=np.uint8)
+        for y, x, h, w in self.toMerge:
+            ROImap[y//qH, x//qW] = 1
+
+        numLabels, labels, stats, centroid = cv2.connectedComponentsWithStats(ROImap,connectivity=4)
+
+        largestLabel = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+        ROImap[labels != largestLabel] = 0
+
+        roi = []
+        for y, x, h, w in self.toMerge:
+            if ROImap[y//qH, x//qW] == 1:
+                roi.append((y,x,h,w))
+
+        return roi
 
     def findHyperRangeAndAvg(self, image):
-        from scipy.signal import find_peaks
-        from scipy.ndimage import gaussian_filter1d
+
 
         hist, bin_edges = np.histogram(image[image>0], bins=256, range=(0.0, 1.0))
         hist_s = gaussian_filter1d(hist, sigma=2)
         maxIdx = np.argmax(hist_s)
 
 
-        peaks, _  = find_peaks(hist_s, prominence=0.2, width=5, height=0.3)
-        minimas, _  = find_peaks(-hist_s)
+        peaks, _  = find_peaks(hist_s, prominence=0.2, width=3, height=0.3)
+        valleys, _  = find_peaks(-hist_s)
 
-        peaks_after = peaks[peaks>maxIdx]
-        localMaxIdx =   peaks_after[np.argmax(hist_s[peaks_after])] if len(peaks_after)>0 else None
+        peaksAfter = peaks[peaks>maxIdx]
+        localMaxIdx =   peaksAfter[np.argmax(hist_s[peaksAfter])] if len(peaksAfter)>0 else None
+        if localMaxIdx is not None:
+            diffPeaks= hist_s[localMaxIdx]-hist_s[peaksAfter]
+            localMaxIdx = peaksAfter[diffPeaks<5][0] # ha lenne hozzá közeli intenzitás, balról legelső pl.: 2 árnyalatú a tumor 191 idx es kép
 
-        minimas_before = minimas[(minimas>maxIdx) & (minimas< localMaxIdx)] if localMaxIdx is not None else None
-        localMinIdx =   minimas_before[np.argmin(hist_s[minimas_before])] if minimas_before is not None and len(minimas_before)>0 else None
+
+        valleysBetween = valleys[(valleys>maxIdx) & (valleys< localMaxIdx)] if localMaxIdx is not None else None
+        localMinIdx =   valleysBetween[np.argmin(hist_s[valleysBetween])] if valleysBetween is not None and len(valleysBetween)>0 else None
 
 
         bin_centers = (bin_edges[:-1]+bin_edges[1:])/2
@@ -95,7 +122,7 @@ class EnhancedSplitMerge:
             avgHyper = 0
             if N != 0:
                 avgHyper = sum / N
-                avgHyper = (bin_centers[localMinIdx]+ avgHyper)/2 # ne pont az átlag legyen hanem a range alja és az átlag felénél reálisabb
+                avgHyper = (low + avgHyper)/2 # ne pont az átlag legyen hanem a range alja és az átlag felénél reálisabb
 
         if self.debug:
             self.showIntensityRange(hist, hist_s, bin_edges, maxIdx,localMaxIdx,localMinIdx, avgHyper)
@@ -340,6 +367,7 @@ class EnhancedSplitMerge:
 
         hist, bin_edges = np.histogram(region, bins=256, range=(0.0, 1.0))
         hist[0]=0
+
         avgHyper, sumHyper = self.getMeanSumIntensity(hist,bin_edges,self.hyperintenseRange)
         avgHypo, sumHypo = self.getMeanSumIntensity(hist,bin_edges,self.hypointenseRange)
 

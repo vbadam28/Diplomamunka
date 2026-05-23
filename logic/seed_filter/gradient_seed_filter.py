@@ -1,6 +1,9 @@
 import cv2
 import numpy as np
 
+from logic.preprocessing.preprocessing_step import inverseEnhanceImage
+
+
 class GradientSeedFilter:
 
     def __init__(self):
@@ -17,7 +20,6 @@ class GradientSeedFilter:
         # gradY = ndimage.sobel(img, axis=0)
         sobel = np.hypot(gradX, gradY)
 
-
         sobelBlur = cv2.GaussianBlur(sobel, (7, 7), 0)
         edgeMask = (sobel > sobelBlur * 1.5).astype(np.uint8)
         edgeMaskDil = cv2.dilate(edgeMask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5)))
@@ -27,15 +29,13 @@ class GradientSeedFilter:
         for x, y in seeds:
             seedMask[y, x] = 1
 
-        filtered = seedMask & (1 - edgeMaskDil)
+        filtered = seedMask & ~edgeMaskDil
 
-
-
-        selectedSeeds = np.argwhere(filtered == 1)[:,::-1]
+        selectedSeeds = np.argwhere(filtered == 1)[:,::-1]  #(x,y) koord legyen
 
 
         if self.debug:
-            self.showDebug(img,sobel,edgeMask,edgeMaskDil,selectedSeeds,seeds)
+            self.showDebug(inverseEnhanceImage(img),sobel,edgeMask,edgeMaskDil,selectedSeeds,seeds)
 
         ctx.set('seeds',selectedSeeds)
 

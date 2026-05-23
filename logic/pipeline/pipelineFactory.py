@@ -73,7 +73,7 @@ class PipelineFactory:
     def enhancedDivergence():
         p = Pipeline(
             preprocessing=[PreprocessingStep(normalize), PreprocessingStep(enhanceImage), EnhancedSplitMerge(), ],
-            seedSelector=DivergenceSeedSelector(),
+            seedSelector=DivergenceSeedSelector(enhanced=True),
             seedFilters=[GradientSeedFilter()],
             regionGrowing=OptThresholdAccRegionGrowing()
         )

@@ -57,7 +57,7 @@ class SplitMerge:
         start_row, start_col = start
         row_length, col_length = length
 
-        if depth <= 0:  # 3 mély lehet emrgelni. lentről felfele
+        if depth <= 0:  # 3 mély lehet mergelni. lentről felfele
             if not self.isHomogen(start, length, position, depth - 1):
                 self.toMerge.append((start_row, start_col, row_length, col_length))
 

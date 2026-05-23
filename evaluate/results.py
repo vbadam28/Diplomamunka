@@ -4,18 +4,26 @@ import seaborn as sns
 import numpy as np
 
 from calc_metrics import score
-from calc_results import loadDataFrame, groupByDataFrame, showHeatmap, calcVolumetricDataFrame, calc, runBiratu
+from calc_results import loadDataFrame, groupByDataFrame, showHeatmap, calcVolumetricDataFrame, calc, runBiratu, runSaad
 
-#runBiratu()
-
+runBiratu()
+runSaad()
+exit()
 
 
 
 #"brainSize","contrastGroup","tumorStdGroup"
 
 #groupPS = groupByDataFrame(df,by=["params","tumorStdGroup"],metrics=["DS","EF","OF","Sp","Sn","FPR","FNR"],aggFuncs=["mean","median"])
-df, grouped, groupPS, dfVol, dfError = calc("csv/enhanced_div_parallel_all_slices_newer2.csv")
-df, grouped, groupPS, dfVol, dfError = calc("csv/saad_parallel_all_slices.csv")
+df, grouped, groupPS, dfVol, dfError = calc("csv/enhanced_div_parallel_all_slices.csv")
+dfSaad, groupedSaad, groupPSSaad, dfVolSaad, dfErrorSaad = calc("csv/saad_parallel_all_slices.csv")
+
+sortedDf = df.sort_values(by=["DS","Sn","Sp","EF"], ascending=[False, False, False,True]).reset_index(drop=True)
+sortedDf=sortedDf.drop(columns=[col for col in sortedDf.columns if "Unnamed" in col])
+with pd.option_context("display.max_columns", None):#,"display.max_rows", None):
+    #print(dfVol)
+    print(sortedDf[sortedDf["lesionSize"]=="huge"])
+    #print(sortedDf[~sortedDf["error"].isna()])
 
 exit()
 showHeatmap(groupPS)

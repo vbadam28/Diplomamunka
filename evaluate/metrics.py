@@ -74,14 +74,16 @@ def Sp(conf): #specificity
     divider = (conf["TN"] + conf["FP"])
     return conf["TN"] / divider if divider>0 else 0
 def Acc(conf): #accuracy
-    return (conf["TP"] + conf["TN"]) / (conf["TP"]+ conf["TN"]+ conf["FP"]+ conf["FN"])
+    divider = (conf["TP"]+ conf["TN"]+ conf["FP"]+ conf["FN"])
+    return (conf["TP"] + conf["TN"]) / divider if divider > 0 else 0
 
 def PSNR(pred,gt): #Peak Signal to Noise Ratio
     MSE =  np.sum((pred.astype(np.uint8)-gt.astype(np.uint8))**2) / pred.size
     return 10 * np.log10(1 / MSE ) if MSE >0 else 0
 
 def PSNR2(conf): #Peak Signal to Noise Ratio
-    MSE = (conf["FP"] + conf["FN"]) / (conf["TP"] + conf["TN"]+conf["FP"] + conf["FN"])
+    divider = (conf["TP"] + conf["TN"]+conf["FP"] + conf["FN"])
+    MSE = (conf["FP"] + conf["FN"]) / divider if divider > 0 else 0
     return 10*np.log10(1/MSE) if MSE>0 else 0
 
 def PSNR3(pred,gt,img): #Peak Signal to Noise Ratio
@@ -109,14 +111,16 @@ def FNR(conf): # false negative rate
     divider = (conf["FN"] + conf["TP"])
     return conf["FN"] / divider if divider>0 else np.nan
 def MA(conf): # missclassified area
-    return (conf["FP"] + conf["FN"]) / (conf["TP"]+ conf["TN"]+ conf["FP"]+ conf["FN"])
+    divider = (conf["TP"]+ conf["TN"]+ conf["FP"]+ conf["FN"])
+    return (conf["FP"] + conf["FN"]) / divider if divider > 0 else 0
 
 def MAPE(conf): #mean absolute percentage error
     divider = (conf["TP"] + conf["FN"])
     return abs(conf["FP"] - conf["FN"]) / divider if divider > 0 else 0
 
 def Rerr(conf): # pixel absolute error ratio
-    return (conf["FP"] - conf["FN"]) / (conf["TP"] + conf["FP"] + conf["FN"] + conf["TN"])
+    divider =  (conf["TP"] + conf["FP"] + conf["FN"] + conf["TN"])
+    return (conf["FP"] - conf["FN"]) / divider if divider > 0 else 0
 
 def MAPE2(pred, gt):
     pred = pred.astype(bool)
