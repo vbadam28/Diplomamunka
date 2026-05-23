@@ -1,8 +1,6 @@
 from collections import namedtuple
 import numpy as np
-from PySide6.QtCore import QEventLoop
 from scipy.ndimage import maximum_filter, gaussian_laplace
-from skimage.feature.blob import blob_log
 
 Window = namedtuple("Window", ["x", "y", "w", "h", "score"])
 class SlidingWindow:
@@ -44,8 +42,8 @@ class SlidingWindow:
             values = window[window>0]
             score = 0.0
             if values.size != 0:
-                score = -np.std(values) * (1 - np.mean(values))
-                #core = np.sqrt(np.mean((values-globalMean)**2)) #ugyanaz a tendencia mint átlag,
+                #score = np.sqrt(np.mean((values-globalMean)**2)) #ugyanaz a tendencia mint átlag,
+
                 score = -np.std(values) * (1-np.mean(values))  #tumorok széle fele húz
                 #kis std jobb(homogénebb) -> *-1 (akkor azok lesznek a legnagyobbak)
                 #sötét terület is lehet homogén -> súlyozzuk az ablak átlagintenzitásával -> mivel negatív std-t nézek ->1-átlag

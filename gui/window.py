@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
         self.button.clicked.connect(self.openFileDialog)
 
         self.selectAlg = QtWidgets.QComboBox()
-        self.selectAlg.addItems(["Select 5 seeds","Divergence","Divergence Blur", "Manual", "SplitMerge Gmm","Sliding Windows","Enhanced Divergence"])
+        self.selectAlg.addItems(["Select 5 seeds","Sliding Windows","Divergence", "Enhanced Divergence","Manual"])
         self.selectAlg.currentIndexChanged.connect(self.onAlgChange)
 
         self.selectType = QtWidgets.QComboBox()
@@ -98,17 +98,13 @@ class MainWindow(QMainWindow):
         if idx==0:
             self.pipeline = PipelineFactory.select5Seeds()
         elif idx==1:
-            self.pipeline = PipelineFactory.divergenceSeeds()
-        elif idx==2:
-            self.pipeline = PipelineFactory.divergenceSeedsWithGaussianBlur()
-        elif idx==3:
-            self.pipeline = PipelineFactory.manualSeeds()
-        elif idx == 4:
-            self.pipeline = PipelineFactory.splitmergeGmm()
-        elif idx == 5:
             self.pipeline = PipelineFactory.slidingWindows()
-        elif idx==6:
+        elif idx==2:
+            self.pipeline = PipelineFactory.divergenceSeeds()
+        elif idx==3:
             self.pipeline = PipelineFactory.enhancedDivergence()
+        elif idx == 4:
+            self.pipeline = PipelineFactory.manualSeeds()
         else:
             pass
 
